@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 
 export function useCalendar() {
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [currentView, setCurrentView] = useState('month');
+    const [currentView, setCurrentView] = useState('week');
     const [events, setEvents] = useState([]);
     const [selectedEvent, setSelectedEvent] = useState(null);
 

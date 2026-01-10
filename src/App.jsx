@@ -5,7 +5,13 @@ import Sidebar from './components/Sidebar';
 import MonthView from './components/MonthView';
 import WeekView from './components/WeekView';
 import DayView from './components/DayView';
+import DayStructureView from './components/DayStructureView';
+import DarkDayView from './components/DarkDayView';
+import DarkWeekView from './components/DarkWeekView';
+import DarkMonthView from './components/DarkMonthView';
 import EventModal from './components/EventModal';
+import './styles/dayStructure.css';
+import './styles/darkViews.css';
 
 export default function App() {
     const {
@@ -67,6 +73,80 @@ export default function App() {
         setEditingEvent(null);
         setModalDefaultDate(null);
     };
+
+    // Dark theme views (day, week, month) - these are the structure views
+    const isDarkView = currentView === 'day' || currentView === 'week' || currentView === 'month';
+    
+    if (isDarkView) {
+        return (
+            <div className="dark-theme-wrapper">
+                {currentView === 'week' && (
+                    <DayStructureView
+                        currentDate={currentDate}
+                        events={events}
+                        onDayClick={handleDayClick}
+                        onCreateEvent={handleCreateEvent}
+                        onViewChange={switchView}
+                        currentView={currentView}
+                    />
+                )}
+                {currentView === 'day' && (
+                    <DarkDayView
+                        currentDate={currentDate}
+                        events={events}
+                        onHourClick={handleHourClick}
+                        onEventClick={handleEventClick}
+                        onCreateEvent={handleCreateEvent}
+                        onViewChange={switchView}
+                        currentView={currentView}
+                    />
+                )}
+                {currentView === 'month' && (
+                    <DarkMonthView
+                        currentDate={currentDate}
+                        events={events}
+                        onDayClick={handleDayClick}
+                        onEventClick={handleEventClick}
+                        onCreateEvent={handleCreateEvent}
+                        onViewChange={switchView}
+                        currentView={currentView}
+                    />
+                )}
+                <EventModal
+                    isOpen={isModalOpen}
+                    event={editingEvent}
+                    defaultDate={modalDefaultDate}
+                    onClose={handleCloseModal}
+                    onSave={handleSaveEvent}
+                    onDelete={handleDeleteEvent}
+                />
+            </div>
+        );
+    }
+
+    // Legacy structure view (if needed)
+    if (currentView === 'structure') {
+        return (
+            <>
+                <DayStructureView
+                    currentDate={currentDate}
+                    events={events}
+                    onDayClick={handleDayClick}
+                    onCreateEvent={handleCreateEvent}
+                    onViewChange={switchView}
+                    currentView="week"
+                />
+                <EventModal
+                    isOpen={isModalOpen}
+                    event={editingEvent}
+                    defaultDate={modalDefaultDate}
+                    onClose={handleCloseModal}
+                    onSave={handleSaveEvent}
+                    onDelete={handleDeleteEvent}
+                />
+            </>
+        );
+    }
 
     return (
         <div className="calendar-container">

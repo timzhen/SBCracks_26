@@ -1,0 +1,275 @@
+/* Day Structure View Styles - Dark Theme */
+.day-structure-container.dark-theme {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    background-color: #000000;
+    color: #ffffff;
+    position: relative;
+    overflow: hidden;
+    padding-bottom: 120px; /* Space for footer */
+}
+
+/* Top Header */
+.day-structure-header {
+    display: flex;
+    align-items: flex-start;
+    padding: 16px;
+    background-color: #000000;
+    border-bottom: 1px solid #333333;
+    min-height: 80px;
+    gap: 16px;
+}
+
+.day-structure-menu-btn {
+    background: none;
+    border: 1px solid #ffffff;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.day-structure-menu-btn:hover {
+    background-color: #333333;
+}
+
+/* Week View - 7 Columns */
+.day-structure-week-view {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.day-structure-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.day-structure-day-header {
+    padding: 8px;
+    text-align: center;
+    border-bottom: 1px solid #333333;
+    margin-bottom: 8px;
+}
+
+.day-structure-day-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #ffffff;
+    margin-bottom: 4px;
+}
+
+.day-structure-day-date {
+    font-size: 12px;
+    color: #cccccc;
+}
+
+.day-structure-day-slot {
+    flex: 1;
+    min-height: calc(100vh - 280px);
+    border: 1px solid #333333;
+    border-radius: 4px;
+    padding: 8px;
+    background-color: #1a1a1a;
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+}
+
+.day-structure-day-slot:hover {
+    border-color: #555555;
+    background-color: #222222;
+}
+
+.day-structure-event-item {
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #ffffff;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.day-structure-event-item:hover {
+    opacity: 0.8;
+}
+
+/* Profile Button */
+.day-structure-profile-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    color: #ffffff;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+}
+
+.day-structure-profile-btn:hover {
+    opacity: 0.8;
+}
+
+.profile-icon-wrapper {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #ffffff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #1a1a1a;
+}
+
+.profile-label {
+    font-size: 12px;
+    color: #ffffff;
+}
+
+/* Footer */
+.day-structure-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background-color: #000000;
+    border-top: 1px solid #333333;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    min-height: 120px;
+    z-index: 100;
+}
+
+/* Create Event Button - Bottom Left */
+.day-structure-create-btn {
+    background: none;
+    border: 1px solid #ffffff;
+    cursor: pointer;
+    padding: 12px 16px;
+    border-radius: 8px;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.day-structure-create-btn:hover {
+    background-color: #333333;
+    transform: translateY(-2px);
+}
+
+/* Microphone Button - Center (The Selling Point) */
+.day-structure-mic-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-color: #4285F4;
+    color: #ffffff;
+    border: 3px solid #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(66, 133, 244, 0.4);
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.day-structure-mic-btn:hover {
+    background-color: #357ae8;
+    box-shadow: 0 6px 16px rgba(66, 133, 244, 0.6);
+    transform: scale(1.1);
+}
+
+.day-structure-mic-btn:active {
+    transform: scale(0.95);
+}
+
+/* Dario AI Chatbot Button - Bottom Right */
+.day-structure-dario-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    color: #ffffff;
+    transition: opacity 0.2s;
+}
+
+.day-structure-dario-btn:hover {
+    opacity: 0.8;
+}
+
+.dario-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    border: 1px solid #ffffff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #1a1a1a;
+}
+
+.dario-label {
+    font-size: 12px;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+/* Scrollbar Styles for Dark Theme */
+.day-structure-day-slot::-webkit-scrollbar {
+    width: 6px;
+}
+
+.day-structure-day-slot::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+.day-structure-day-slot::-webkit-scrollbar-thumb {
+    background: #555555;
+    border-radius: 3px;
+}
+
+.day-structure-day-slot::-webkit-scrollbar-thumb:hover {
+    background: #777777;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .day-structure-day-name {
+        font-size: 12px;
+    }
+    
+    .day-structure-day-date {
+        font-size: 11px;
+    }
+}
