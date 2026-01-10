@@ -6,8 +6,8 @@
 
 body {
     font-family: 'Google Sans', Roboto, Arial, sans-serif;
-    background-color: #fff;
-    color: #202124;
+    background-color: #202124;
+    color: #e8eaed;
     overflow: hidden;
 }
 
@@ -24,8 +24,8 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 8px 16px;
-    border-bottom: 1px solid #e8eaed;
-    background-color: #fff;
+    border-bottom: 1px solid #3c4043;
+    background-color: #202124;
     height: 64px;
     min-height: 64px;
 }
@@ -43,7 +43,7 @@ body {
     cursor: pointer;
     padding: 8px;
     border-radius: 50%;
-    color: #5f6368;
+    color: #9aa0a6;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -51,7 +51,7 @@ body {
 }
 
 .menu-button:hover {
-    background-color: #f1f3f4;
+    background-color: #3c4043;
 }
 
 .logo-section {
@@ -68,7 +68,7 @@ body {
 .logo-text {
     font-size: 22px;
     font-weight: 400;
-    color: #5f6368;
+    color: #e8eaed;
 }
 
 .header-center {
@@ -81,7 +81,7 @@ body {
 
 .view-controls {
     display: flex;
-    background-color: #f1f3f4;
+    background-color: #3c4043;
     border-radius: 24px;
     padding: 4px;
     gap: 4px;
@@ -95,18 +95,18 @@ body {
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
-    color: #5f6368;
+    color: #9aa0a6;
     transition: all 0.2s;
 }
 
 .view-btn.active {
-    background-color: #fff;
-    color: #202124;
-    box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+    background-color: #303134;
+    color: #e8eaed;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
 }
 
 .view-btn:hover:not(.active) {
-    background-color: rgba(255, 255, 255, 0.5);
+    background-color: rgba(60, 64, 67, 0.5);
 }
 
 .navigation-controls {
@@ -121,7 +121,7 @@ body {
     cursor: pointer;
     padding: 8px;
     border-radius: 50%;
-    color: #5f6368;
+    color: #9aa0a6;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -129,27 +129,27 @@ body {
 }
 
 .nav-btn:hover {
-    background-color: #f1f3f4;
+    background-color: #3c4043;
 }
 
 #today-btn {
     padding: 6px 16px;
-    border: 1px solid #dadce0;
+    border: 1px solid #5f6368;
     border-radius: 4px;
     font-size: 14px;
     font-weight: 500;
-    background-color: #fff;
-    color: #202124;
+    background-color: #303134;
+    color: #e8eaed;
 }
 
 #today-btn:hover {
-    background-color: #f8f9fa;
+    background-color: #3c4043;
 }
 
 .current-date-display {
     font-size: 22px;
     font-weight: 400;
-    color: #202124;
+    color: #e8eaed;
     min-width: 200px;
 }
 
@@ -168,7 +168,7 @@ body {
     cursor: pointer;
     padding: 8px;
     border-radius: 50%;
-    color: #5f6368;
+    color: #9aa0a6;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -177,7 +177,7 @@ body {
 
 .search-button:hover,
 .settings-button:hover {
-    background-color: #f1f3f4;
+    background-color: #3c4043;
 }
 
 .account-button {
@@ -208,8 +208,8 @@ body {
     top: 64px;
     width: 256px;
     height: calc(100vh - 64px);
-    background-color: #fff;
-    border-right: 1px solid #e8eaed;
+    background-color: #202124;
+    border-right: 1px solid #3c4043;
     padding: 16px;
     overflow-y: auto;
     z-index: 100;
@@ -250,19 +250,19 @@ body {
     padding: 8px 12px;
     border-radius: 20px;
     cursor: pointer;
-    color: #202124;
+    color: #e8eaed;
     font-size: 14px;
     transition: background-color 0.2s;
     margin-bottom: 4px;
 }
 
 .sidebar-item:hover {
-    background-color: #f1f3f4;
+    background-color: #3c4043;
 }
 
 .sidebar-item.active {
-    background-color: #e8f0fe;
-    color: #1a73e8;
+    background-color: #1a73e8;
+    color: #fff;
 }
 
 .sidebar-item svg {
@@ -273,7 +273,7 @@ body {
 .section-title {
     font-size: 12px;
     font-weight: 500;
-    color: #5f6368;
+    color: #9aa0a6;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     padding: 8px 12px;
@@ -294,13 +294,13 @@ body {
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
-    color: #202124;
+    color: #e8eaed;
     transition: background-color 0.2s;
     position: relative;
 }
 
 .calendar-item:hover {
-    background-color: #f1f3f4;
+    background-color: #3c4043;
 }
 
 .calendar-item:hover .calendar-more {
@@ -318,7 +318,7 @@ body {
     margin-left: auto;
     opacity: 0;
     transition: opacity 0.2s;
-    color: #5f6368;
+    color: #9aa0a6;
 }
 
 .add-calendar-btn {
@@ -338,7 +338,7 @@ body {
 }
 
 .add-calendar-btn:hover {
-    background-color: #f1f3f4;
+    background-color: #3c4043;
 }
 
 /* Main Content */
@@ -347,7 +347,7 @@ body {
     margin-top: 64px;
     height: calc(100vh - 64px);
     overflow-y: auto;
-    background-color: #fff;
+    background-color: #202124;
 }
 
 .calendar-view {
@@ -376,7 +376,7 @@ body {
     text-align: center;
     font-size: 11px;
     font-weight: 500;
-    color: #5f6368;
+    color: #9aa0a6;
     text-transform: uppercase;
 }
 
@@ -384,13 +384,13 @@ body {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 1px;
-    background-color: #e8eaed;
-    border: 1px solid #e8eaed;
+    background-color: #3c4043;
+    border: 1px solid #3c4043;
 }
 
 .calendar-day {
     min-height: 120px;
-    background-color: #fff;
+    background-color: #303134;
     padding: 8px;
     position: relative;
     cursor: pointer;
@@ -398,28 +398,29 @@ body {
 }
 
 .calendar-day:hover {
-    background-color: #f8f9fa;
+    background-color: #3c4043;
 }
 
 .calendar-day.other-month {
-    background-color: #f8f9fa;
-    color: #9aa0a6;
+    background-color: #282a2d;
+    color: #5f6368;
 }
 
 .calendar-day.today {
-    background-color: #fef7e0;
+    background-color: #41331c;
+    border: 1px solid #ea8600;
 }
 
 .day-number {
     font-size: 13px;
     font-weight: 400;
-    color: #5f6368;
+    color: #e8eaed;
     margin-bottom: 4px;
 }
 
 .calendar-day.today .day-number {
     font-weight: 500;
-    color: #1a73e8;
+    color: #ea8600;
 }
 
 .day-events {
@@ -446,7 +447,7 @@ body {
 }
 
 .event-item.more-events {
-    color: #1a73e8;
+    color: #8ab4f8;
     background-color: transparent;
     font-weight: 500;
 }
@@ -458,8 +459,8 @@ body {
 
 .week-header {
     display: flex;
-    border-bottom: 1px solid #e8eaed;
-    background-color: #fff;
+    border-bottom: 1px solid #3c4043;
+    background-color: #202124;
     position: sticky;
     top: 0;
     z-index: 10;
@@ -468,7 +469,7 @@ body {
 .time-column {
     width: 80px;
     min-width: 80px;
-    border-right: 1px solid #e8eaed;
+    border-right: 1px solid #3c4043;
 }
 
 .week-days {
@@ -480,24 +481,24 @@ body {
 .week-day-header {
     padding: 12px;
     text-align: center;
-    border-right: 1px solid #e8eaed;
+    border-right: 1px solid #3c4043;
 }
 
 .week-day-name {
     font-size: 12px;
-    color: #5f6368;
+    color: #9aa0a6;
     text-transform: uppercase;
     margin-bottom: 4px;
 }
 
 .week-day-number {
     font-size: 26px;
-    color: #202124;
+    color: #e8eaed;
     font-weight: 400;
 }
 
 .week-day-header.today .week-day-number {
-    color: #1a73e8;
+    color: #8ab4f8;
     font-weight: 500;
 }
 
@@ -505,43 +506,47 @@ body {
     display: flex;
     height: calc(100vh - 200px);
     overflow-y: auto;
+    background-color: #202124;
 }
 
 .time-column {
     padding: 0;
+    background-color: #202124;
 }
 
 .time-slot {
     height: 60px;
-    border-bottom: 1px solid #e8eaed;
+    border-bottom: 1px solid #3c4043;
     padding-right: 8px;
     text-align: right;
     font-size: 12px;
-    color: #5f6368;
+    color: #9aa0a6;
     padding-top: 2px;
+    background-color: #202124;
 }
 
 .week-grid {
     flex: 1;
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    border-right: 1px solid #e8eaed;
+    border-right: 1px solid #3c4043;
 }
 
 .week-day-column {
-    border-right: 1px solid #e8eaed;
+    border-right: 1px solid #3c4043;
     position: relative;
     min-height: 1440px;
+    background-color: #303134;
 }
 
 .week-hour-slot {
     height: 60px;
-    border-bottom: 1px solid #e8eaed;
+    border-bottom: 1px solid #3c4043;
     position: relative;
 }
 
 .week-hour-slot:hover {
-    background-color: #f8f9fa;
+    background-color: #3c4043;
 }
 
 /* Day View */
@@ -551,8 +556,8 @@ body {
 
 .day-header {
     display: flex;
-    border-bottom: 1px solid #e8eaed;
-    background-color: #fff;
+    border-bottom: 1px solid #3c4043;
+    background-color: #202124;
     position: sticky;
     top: 0;
     z-index: 10;
@@ -563,30 +568,32 @@ body {
     padding: 12px 16px;
     font-size: 22px;
     font-weight: 400;
-    color: #202124;
+    color: #e8eaed;
 }
 
 .day-body {
     display: flex;
     height: calc(100vh - 150px);
     overflow-y: auto;
+    background-color: #202124;
 }
 
 .day-grid {
     flex: 1;
-    border-right: 1px solid #e8eaed;
+    border-right: 1px solid #3c4043;
     position: relative;
     min-height: 1440px;
+    background-color: #303134;
 }
 
 .day-hour-slot {
     height: 60px;
-    border-bottom: 1px solid #e8eaed;
+    border-bottom: 1px solid #3c4043;
     position: relative;
 }
 
 .day-hour-slot:hover {
-    background-color: #f8f9fa;
+    background-color: #3c4043;
 }
 
 /* Event Positioning */
@@ -631,13 +638,13 @@ body {
 }
 
 .modal-content {
-    background-color: #fff;
+    background-color: #303134;
     border-radius: 8px;
     width: 600px;
     max-width: 90vw;
     max-height: 90vh;
     overflow-y: auto;
-    box-shadow: 0 8px 10px 1px rgba(60, 64, 67, 0.14), 0 3px 14px 2px rgba(60, 64, 67, 0.12), 0 5px 5px -3px rgba(60, 64, 67, 0.2);
+    box-shadow: 0 8px 10px 1px rgba(0, 0, 0, 0.5), 0 3px 14px 2px rgba(0, 0, 0, 0.4), 0 5px 5px -3px rgba(0, 0, 0, 0.3);
 }
 
 .modal-header {
@@ -645,13 +652,13 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 16px 24px;
-    border-bottom: 1px solid #e8eaed;
+    border-bottom: 1px solid #3c4043;
 }
 
 .modal-header h2 {
     font-size: 20px;
     font-weight: 400;
-    color: #202124;
+    color: #e8eaed;
 }
 
 .close-modal {
@@ -660,7 +667,7 @@ body {
     cursor: pointer;
     padding: 8px;
     border-radius: 50%;
-    color: #5f6368;
+    color: #9aa0a6;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -668,7 +675,7 @@ body {
 }
 
 .close-modal:hover {
-    background-color: #f1f3f4;
+    background-color: #3c4043;
 }
 
 .modal-body {
@@ -686,29 +693,39 @@ body {
     border-bottom: 1px solid transparent;
     font-size: 22px;
     font-weight: 400;
-    color: #202124;
+    color: #e8eaed;
+    background-color: transparent;
     outline: none;
     font-family: inherit;
 }
 
 .event-input:focus {
-    border-bottom-color: #1a73e8;
+    border-bottom-color: #8ab4f8;
+}
+
+.event-input::placeholder {
+    color: #5f6368;
 }
 
 .event-textarea {
     width: 100%;
     padding: 8px 0;
     border: none;
-    border-bottom: 1px solid #e8eaed;
+    border-bottom: 1px solid #3c4043;
     font-size: 14px;
-    color: #202124;
+    color: #e8eaed;
+    background-color: transparent;
     outline: none;
     resize: none;
     font-family: inherit;
 }
 
 .event-textarea:focus {
-    border-bottom-color: #1a73e8;
+    border-bottom-color: #8ab4f8;
+}
+
+.event-textarea::placeholder {
+    color: #5f6368;
 }
 
 .datetime-group {
@@ -716,46 +733,48 @@ body {
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    color: #e8eaed;
 }
 
 .date-input,
 .time-input {
     padding: 8px;
-    border: 1px solid #dadce0;
+    border: 1px solid #5f6368;
     border-radius: 4px;
     font-size: 14px;
-    color: #202124;
+    color: #e8eaed;
+    background-color: #202124;
     font-family: inherit;
 }
 
 .date-input:focus,
 .time-input:focus {
     outline: none;
-    border-color: #1a73e8;
+    border-color: #8ab4f8;
 }
 
 .event-select {
     width: 100%;
     padding: 8px;
-    border: 1px solid #dadce0;
+    border: 1px solid #5f6368;
     border-radius: 4px;
     font-size: 14px;
-    color: #202124;
+    color: #e8eaed;
     font-family: inherit;
-    background-color: #fff;
+    background-color: #202124;
     cursor: pointer;
 }
 
 .event-select:focus {
     outline: none;
-    border-color: #1a73e8;
+    border-color: #8ab4f8;
 }
 
 .form-group label {
     display: block;
     font-size: 14px;
     font-weight: 500;
-    color: #5f6368;
+    color: #9aa0a6;
     margin-bottom: 8px;
 }
 
@@ -764,24 +783,24 @@ body {
     align-items: center;
     gap: 12px;
     padding: 8px;
-    border: 1px solid #dadce0;
+    border: 1px solid #5f6368;
     border-radius: 4px;
-    background-color: #fff;
+    background-color: #202124;
     cursor: pointer;
     font-size: 14px;
-    color: #202124;
+    color: #e8eaed;
     width: 100%;
 }
 
 .color-picker-btn:hover {
-    background-color: #f8f9fa;
+    background-color: #3c4043;
 }
 
 .selected-color {
     width: 24px;
     height: 24px;
     border-radius: 4px;
-    border: 1px solid #dadce0;
+    border: 1px solid #5f6368;
 }
 
 .modal-footer {
@@ -789,7 +808,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 16px 24px;
-    border-top: 1px solid #e8eaed;
+    border-top: 1px solid #3c4043;
 }
 
 .modal-actions {
@@ -819,31 +838,31 @@ body {
 }
 
 .btn-secondary {
-    background-color: #fff;
-    color: #1a73e8;
-    border: 1px solid #dadce0;
+    background-color: transparent;
+    color: #8ab4f8;
+    border: 1px solid #5f6368;
 }
 
 .btn-secondary:hover {
-    background-color: #f8f9fa;
+    background-color: #3c4043;
 }
 
 #delete-event {
-    color: #ea4335;
+    color: #f28b82;
 }
 
 #delete-event:hover {
-    background-color: #fef7e0;
+    background-color: #4a2c2a;
 }
 
 /* Color Picker Modal */
 .color-picker-modal {
     display: none;
     position: absolute;
-    background-color: #fff;
-    border: 1px solid #dadce0;
+    background-color: #303134;
+    border: 1px solid #5f6368;
     border-radius: 8px;
-    box-shadow: 0 2px 10px 2px rgba(60, 64, 67, 0.15), 0 0 1px rgba(60, 64, 67, 0.3);
+    box-shadow: 0 2px 10px 2px rgba(0, 0, 0, 0.5), 0 0 1px rgba(0, 0, 0, 0.3);
     padding: 16px;
     z-index: 1001;
     margin-top: 8px;
@@ -875,7 +894,7 @@ body {
 
 .color-option:hover {
     transform: scale(1.1);
-    border-color: #dadce0;
+    border-color: #9aa0a6;
 }
 
 /* Scrollbar Styles */
@@ -885,15 +904,15 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-    background: #fff;
+    background: #202124;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #dadce0;
+    background: #5f6368;
     border-radius: 8px;
-    border: 4px solid #fff;
+    border: 4px solid #202124;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #bdc1c6;
+    background: #9aa0a6;
 }
