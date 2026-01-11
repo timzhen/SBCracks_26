@@ -34,9 +34,12 @@ export default function EventModal({ isOpen, event, defaultDate, onClose, onSave
             // Create new event
             const eventDate = defaultDate || new Date();
             const start = new Date(eventDate);
-            start.setHours(9, 0, 0, 0);
+            // If defaultDate was provided, use its time; otherwise default to 9am
+            if (!defaultDate) {
+                start.setHours(9, 0, 0, 0);
+            }
             const end = new Date(start);
-            end.setHours(10, 0, 0, 0);
+            end.setHours(end.getHours() + 1, 0, 0, 0);
             
             setTitle('');
             setDescription('');
