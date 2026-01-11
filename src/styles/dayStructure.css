@@ -336,6 +336,10 @@
 }
 
 /* Dario AI Chatbot Button - Bottom Right */
+.dario-chatbox-container {
+    position: relative;
+}
+
 .day-structure-dario-btn {
     background: none;
     border: none;
@@ -347,10 +351,15 @@
     padding: 8px;
     color: #ffffff;
     transition: opacity 0.2s;
+    position: relative;
 }
 
 .day-structure-dario-btn:hover {
     opacity: 0.8;
+}
+
+.day-structure-dario-btn.active {
+    opacity: 1;
 }
 
 .dario-icon-wrapper {
@@ -364,10 +373,262 @@
     background-color: #1a1a1a;
 }
 
+.dario-icon-wrapper-small {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #ffffff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #1a1a1a;
+}
+
 .dario-label {
     font-size: 12px;
     color: #ffffff;
     font-weight: 500;
+}
+
+.dario-chat-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background-color: #4285F4;
+    color: #ffffff;
+    border-radius: 10px;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    min-width: 18px;
+    text-align: center;
+}
+
+.dario-chatbox {
+    position: fixed;
+    bottom: 120px;
+    right: 20px;
+    width: 380px;
+    height: 500px;
+    background-color: #1a1a1a;
+    border: 1px solid #333333;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dario-chatbox-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    border-bottom: 1px solid #333333;
+}
+
+.dario-chatbox-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.dario-chatbox-close {
+    background: none;
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.dario-chatbox-close:hover {
+    opacity: 1;
+}
+
+.dario-chatbox-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dario-chatbox-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #888888;
+    text-align: center;
+    padding: 20px;
+}
+
+.dario-chatbox-empty p {
+    margin: 4px 0;
+}
+
+.dario-chatbox-hint {
+    font-size: 12px;
+    color: #666666;
+}
+
+.dario-chatbox-message {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 80%;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dario-chatbox-message.user {
+    align-self: flex-end;
+}
+
+.dario-chatbox-message.ai {
+    align-self: flex-start;
+}
+
+.dario-chatbox-message-content {
+    padding: 10px 14px;
+    border-radius: 12px;
+    word-wrap: break-word;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.dario-chatbox-message.user .dario-chatbox-message-content {
+    background-color: #4285F4;
+    color: #ffffff;
+    border-bottom-right-radius: 4px;
+}
+
+.dario-chatbox-message.ai .dario-chatbox-message-content {
+    background-color: #2a2a2a;
+    color: #ffffff;
+    border-bottom-left-radius: 4px;
+}
+
+.dario-voice-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+    opacity: 0.8;
+}
+
+.dario-chatbox-message-time {
+    font-size: 10px;
+    color: #888888;
+    padding: 0 4px;
+}
+
+.dario-chatbox-message.user .dario-chatbox-message-time {
+    text-align: right;
+}
+
+.dario-chatbox-input-form {
+    display: flex;
+    padding: 12px;
+    border-top: 1px solid #333333;
+    gap: 8px;
+}
+
+.dario-chatbox-input {
+    flex: 1;
+    background-color: #2a2a2a;
+    border: 1px solid #333333;
+    border-radius: 20px;
+    padding: 10px 16px;
+    color: #ffffff;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.dario-chatbox-input:focus {
+    border-color: #4285F4;
+}
+
+.dario-chatbox-input::placeholder {
+    color: #666666;
+}
+
+.dario-chatbox-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.dario-chatbox-send {
+    background-color: #4285F4;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.dario-chatbox-send:hover:not(:disabled) {
+    background-color: #357ae8;
+}
+
+.dario-chatbox-send:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.dario-chatbox-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.dario-chatbox-messages::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+.dario-chatbox-messages::-webkit-scrollbar-thumb {
+    background: #555555;
+    border-radius: 3px;
+}
+
+.dario-chatbox-messages::-webkit-scrollbar-thumb:hover {
+    background: #777777;
 }
 
 /* Scrollbar Styles for Dark Theme */

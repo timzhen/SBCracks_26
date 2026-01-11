@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || 'f40edd99a67fed5d70fce148818e893ff29d5c6f';
+const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || 'dba3945f74f3e185269d2078564efeebecef9e29';
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 
 export default function DarkFooter({ 
@@ -19,17 +19,28 @@ export default function DarkFooter({
 }) {
     const [isRecording, setIsRecording] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [chatMessages, setChatMessages] = useState([]);
+    const [chatInput, setChatInput] = useState('');
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
+    const spacebarPressedRef = useRef(false);
+    const streamRef = useRef(null);
+    const isRecordingRef = useRef(false);
+    const isProcessingRef = useRef(false);
+    const startRecordingRef = useRef(null);
+    const stopRecordingRef = useRef(null);
+    const chatMessagesEndRef = useRef(null);
+    const chatInputRef = useRef(null);
+
+    // Keep refs in sync with state
+    useEffect(() => {
+        isRecordingRef.current = isRecording;
+    }, [isRecording]);
 
     useEffect(() => {
-        return () => {
-            // Cleanup on unmount
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                mediaRecorderRef.current.stop();
-            }
-        };
-    }, []);
+        isProcessingRef.current = isProcessing;
+    }, [isProcessing]);
 
     // LLM-powered command parsing using OpenAI
     const parseCommandWithLLM = async (transcript, entities) => {
@@ -250,8 +261,14 @@ DATE/TIME REASONING:
 - "next month" = same day next month
 - Relative times: "in 2 hours" = current time + 2 hours
 - Day names: Use next occurrence if past today, or today if it's today
+- If no date specified, use today's date
+- If no time specified, use current time or a reasonable default (e.g., 9:00 AM)
 
-If date/time unclear or command unclear, return null.
+CRITICAL: You MUST always return a valid JSON object. Never return null or empty responses.
+- If the command is unclear, make your best interpretation and return a createEvent with reasonable defaults
+- If date/time is unclear, use today's date and current time (or 9:00 AM if no time context)
+- Extract the main action/task from the user's command as the title
+- Always include both start and end times (if only start time given, add 1 hour for end time)
 
 Return ONLY valid JSON, no other text.`;
 
@@ -263,7 +280,7 @@ Return ONLY valid JSON, no other text.`;
                     'Authorization': `Bearer ${OPENAI_API_KEY}`
                 },
                 body: JSON.stringify({
-                    model: 'gpt-4o-mini', // Using mini for faster, cheaper responses
+                    model: 'gpt-4o', // Using GPT-4o for better reasoning and understanding
                     messages: [
                         {
                             role: 'system',
@@ -289,8 +306,11 @@ Return ONLY valid JSON, no other text.`;
             const content = data.choices?.[0]?.message?.content;
             if (!content) {
                 console.error('No content in OpenAI response');
+                console.error('Full API response:', data);
                 return null;
             }
+
+            console.log('OpenAI response content:', content);
 
             // Parse JSON response
             let llmCommand;
@@ -298,8 +318,11 @@ Return ONLY valid JSON, no other text.`;
                 // Remove markdown code blocks if present
                 const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
                 llmCommand = JSON.parse(cleanedContent);
+                console.log('Parsed LLM command:', llmCommand);
             } catch (parseError) {
-                console.error('Error parsing LLM JSON response:', parseError, content);
+                console.error('Error parsing LLM JSON response:', parseError);
+                console.error('Raw content:', content);
+                console.error('Cleaned content attempt:', content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
                 return null;
             }
 
@@ -310,7 +333,19 @@ Return ONLY valid JSON, no other text.`;
                 const end = new Date(llmCommand.event.end);
                 
                 if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-                    console.error('Invalid dates from LLM:', llmCommand.event.start, llmCommand.event.end);
+                    console.error('Invalid dates from LLM (createEvent):', {
+                        start: llmCommand.event.start,
+                        end: llmCommand.event.end,
+                        startParsed: start.toString(),
+                        endParsed: end.toString(),
+                        fullCommand: llmCommand
+                    });
+                    return null;
+                }
+                
+                // Validate title exists
+                if (!llmCommand.event.title || llmCommand.event.title.trim() === '') {
+                    console.error('Missing title from LLM:', llmCommand);
                     return null;
                 }
 
@@ -381,9 +416,15 @@ Return ONLY valid JSON, no other text.`;
                 return { type: 'goToToday' };
             }
 
+            console.warn('LLM returned unrecognized command type:', llmCommand.type);
             return null;
         } catch (error) {
             console.error('Error calling OpenAI API:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack,
+                transcript: transcript.substring(0, 100) // First 100 chars for debugging
+            });
             return null;
         }
     };
@@ -2271,6 +2312,75 @@ Return ONLY valid JSON, no other text.`;
         return null;
     };
 
+    const speak = async (text, addToChat = true) => {
+        if (addToChat) {
+            addChatMessage(text, false, false);
+        }
+        try {
+            // Use Deepgram's Aura TTS API for natural voice
+            // Using Aura-2 model with Vesta voice (feminine, American)
+            const params = new URLSearchParams({
+                model: 'aura-2-vesta-en',
+                encoding: 'linear16',
+                container: 'none',
+                sample_rate: '24000'
+            });
+
+            const response = await fetch(`https://api.deepgram.com/v1/speak?${params.toString()}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Token ${DEEPGRAM_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text: text })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Deepgram TTS API error:', response.status, errorText);
+                throw new Error(`Deepgram TTS API error: ${response.status}`);
+            }
+
+            // Get the audio data as a blob
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            // Play the audio
+            await audio.play();
+            
+            // Clean up the URL when audio finishes
+            audio.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+            };
+
+            // Handle errors
+            audio.onerror = () => {
+                console.error('Error playing audio');
+                URL.revokeObjectURL(audioUrl);
+                // Fallback to browser speech synthesis
+                fallbackSpeak(text);
+            };
+        } catch (error) {
+            console.error('Error with Deepgram TTS:', error);
+            // Fallback to browser speech synthesis if Deepgram fails
+            fallbackSpeak(text);
+        }
+    };
+
+    const fallbackSpeak = (text) => {
+        // Fallback to browser's built-in speech synthesis
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            utterance.lang = 'en-US';
+            window.speechSynthesis.speak(utterance);
+        }
+    };
+
     const executeCommand = (command) => {
         if (!command) {
             console.log('No command recognized');
@@ -2288,26 +2398,14 @@ Return ONLY valid JSON, no other text.`;
                         onAddEvent(eventData);
                         const eventDate = new Date(eventData.start);
                         const dateStr = eventDate.toLocaleDateString('en-US', { 
-                            weekday: 'short', 
-                            month: 'short', 
+                            weekday: 'long', 
+                            month: 'long', 
                             day: 'numeric'
                         });
-                        // Check if it's an all-day event (start at 00:00:00 and end at 23:59:59 on same day)
-                        const eventEnd = new Date(eventData.end);
-                        const isAllDayEvent = eventDate.getHours() === 0 && eventDate.getMinutes() === 0 && 
-                                             eventEnd.getHours() === 23 && eventEnd.getMinutes() === 59 && 
-                                             eventDate.toDateString() === eventEnd.toDateString();
-                        
-                        if (isAllDayEvent) {
-                            alert(`✓ Created all-day event: "${eventData.title}" on ${dateStr}`);
-                        } else {
-                            const timeStr = eventDate.toLocaleTimeString('en-US', { 
-                                hour: 'numeric', 
-                                minute: '2-digit',
-                                hour12: true
-                            });
-                            alert(`✓ Created event: "${eventData.title}" on ${dateStr} at ${timeStr}`);
-                        }
+                        // Success message: "Successfully created [event/task] on ____"
+                        speak(`Successfully created ${eventData.title} on ${dateStr}`);
+                    } else {
+                        speak("Sorry, I was unable to hear the event");
                     }
                     break;
                 case 'editEvent':
@@ -2315,61 +2413,57 @@ Return ONLY valid JSON, no other text.`;
                         onUpdateEvent(command.eventId, command.event);
                         const eventDate = new Date(command.event.start);
                         const dateStr = eventDate.toLocaleDateString('en-US', { 
-                            weekday: 'short', 
-                            month: 'short', 
+                            weekday: 'long', 
+                            month: 'long', 
                             day: 'numeric'
                         });
-                        const timeStr = eventDate.toLocaleTimeString('en-US', { 
-                            hour: 'numeric', 
-                            minute: '2-digit',
-                            hour12: true
-                        });
-                        alert(`✓ Updated event: "${command.event.title}" on ${dateStr} at ${timeStr}`);
+                        speak(`Successfully updated ${command.event.title} on ${dateStr}`);
                     } else {
-                        alert('Could not find event to edit. Please specify the event name more clearly.');
+                        speak("Sorry, I was unable to hear the event");
                     }
                     break;
                 case 'deleteEvent':
                     if (command.eventId && onDeleteEvent) {
                         const eventTitle = command.eventTitle || 'event';
                         onDeleteEvent(command.eventId);
-                        alert(`✓ Deleted event: "${eventTitle}"`);
+                        speak(`Successfully deleted ${eventTitle}`);
                     } else {
-                        alert('Could not find event to delete. Please specify the event name more clearly.');
+                        speak("Sorry, I was unable to hear the event");
                     }
                     break;
                 case 'navigate':
                     if (onNavigateDate) {
                         onNavigateDate(command.direction);
                         const directionText = command.direction > 0 ? 'forward' : 'back';
-                        alert(`✓ Navigated ${directionText}`);
+                        speak(`Moving ${directionText} for you`);
                     }
                     break;
                 case 'switchView':
                     if (onSwitchView) {
                         onSwitchView(command.view);
-                        alert(`✓ Switched to ${command.view} view`);
+                        speak(`Switching to ${command.view} view now`);
                     }
                     break;
                 case 'goToToday':
                     if (onGoToToday) {
                         onGoToToday();
-                        alert('✓ Navigated to today');
+                        speak('Taking you to today');
                     }
                     break;
                 default:
                     console.log('Unknown command type:', command.type);
-                    alert(`Unknown command type: ${command.type}`);
+                    speak("Sorry, I'm not sure what you mean by that. Could you try again?");
             }
         } catch (error) {
             console.error('Error executing command:', error);
-            alert(`Error executing command: ${error.message}`);
+            speak(`Oops, something went wrong. ${error.message}`);
         }
     };
 
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
             setIsRecording(true);
             audioChunksRef.current = [];
             
@@ -2395,8 +2489,12 @@ Return ONLY valid JSON, no other text.`;
             };
             
             mediaRecorderRef.current.onstop = async () => {
-                stream.getTracks().forEach(track => track.stop());
+                if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(track => track.stop());
+                    streamRef.current = null;
+                }
                 setIsRecording(false); // Always reset recording state when stopped
+                isRecordingRef.current = false;
                 
                 if (audioChunksRef.current.length > 0) {
                     setIsProcessing(true);
@@ -2405,7 +2503,7 @@ Return ONLY valid JSON, no other text.`;
                         await transcribeAudio(audioBlob);
                     } catch (error) {
                         console.error('Error in transcription:', error);
-                        alert(`Error processing audio: ${error.message}`);
+                        speak(`Sorry, I had trouble processing that. ${error.message}`);
                     } finally {
                         setIsProcessing(false);
                     }
@@ -2414,22 +2512,19 @@ Return ONLY valid JSON, no other text.`;
             
             mediaRecorderRef.current.start();
             
-            // Auto-stop after 20 seconds (longer timeout to allow user to finish speaking)
-            const timeoutId = setTimeout(() => {
-                if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                    stopRecording();
-                }
-            }, 20000);
-            
-            // Store timeout ID for cleanup
-            mediaRecorderRef.current.timeoutId = timeoutId;
-            
         } catch (error) {
             console.error('Error accessing microphone:', error);
-            alert('Could not access microphone. Please check permissions.');
+            speak("I can't access your microphone. Please check your permissions and try again.");
             setIsRecording(false);
+            isRecordingRef.current = false;
+            spacebarPressedRef.current = false;
         }
     };
+
+    // Store function refs for keyboard handlers - use useEffect to ensure they're set
+    useEffect(() => {
+        startRecordingRef.current = startRecording;
+    }, [startRecording]);
     
     const transcribeAudio = async (audioBlob) => {
         try {
@@ -2439,21 +2534,25 @@ Return ONLY valid JSON, no other text.`;
                 contentType = audioBlob.type;
             }
             
-            // Use Deepgram's audio intelligence features:
+            // Use Deepgram's audio intelligence features with enhanced reasoning:
             // - smart_format: better formatting
             // - paragraphs: better understanding of structure
             // - utterances: separate utterances
             // - entity_detection: extract dates, times, quantities, locations
             // - punctuate: punctuation
-            // - model: nova-3 for best accuracy
+            // - model: nova-2 for enhanced reasoning and understanding
+            // - topics: extract topics for better context understanding
+            // - sentiment: understand sentiment for better responses
             const params = new URLSearchParams({
-                model: 'nova-3',
+                model: 'nova-2',
                 language: 'en-US',
                 smart_format: 'true',
                 punctuate: 'true',
                 paragraphs: 'true',
                 utterances: 'true',
                 entity_detection: 'true',
+                topics: 'true',
+                sentiment: 'true',
                 diarize: 'false'
             });
             
@@ -2494,63 +2593,54 @@ Return ONLY valid JSON, no other text.`;
             console.log('Paragraphs:', paragraphs);
             
             if (transcript.trim()) {
+                // Step 1: Deepgram listens and converts speech to text
                 // Use paragraphs if available, otherwise use transcript
                 const textToParse = paragraphs.trim() || transcript.trim();
-                console.log('Attempting to parse with LLM:', textToParse);
+                console.log('Deepgram heard:', textToParse);
                 console.log('Available entities:', entities.map(e => ({ type: e.type || e.label, value: e.value })));
                 
-                // Use LLM for intelligent command parsing
+                // Add voice input to chat
+                addChatMessage(textToParse, true, true);
+                
+                // Step 2: ChatGPT reasons about what Deepgram heard and creates events
+                // ChatGPT is the PRIMARY reasoning engine - Deepgram is ONLY for listening
+                console.log('Sending to ChatGPT for reasoning:', {
+                    text: textToParse,
+                    textLength: textToParse.length,
+                    entitiesCount: entities.length
+                });
+                
                 const llmCommand = await parseCommandWithLLM(textToParse, entities);
                 
                 if (llmCommand) {
-                    console.log('LLM parsed command successfully:', llmCommand);
+                    console.log('ChatGPT reasoned successfully:', llmCommand);
                     executeCommand(llmCommand);
                     return;
                 }
                 
-                // Fallback to entity-based parsing if LLM fails
-                console.log('LLM parsing failed, falling back to entity-based parsing');
-                const command = parseVoiceCommandWithEntities(textToParse, entities, transcript);
-                if (command) {
-                    console.log('Command parsed successfully:', command);
-                    executeCommand(command);
-                } else {
-                    // Provide helpful feedback based on what was detected
-                    const dateEntitiesFiltered = entities.filter(e => e.type === 'DATE' || e.label === 'DATE');
-                    const timeEntitiesFiltered = entities.filter(e => e.type === 'TIME' || e.label === 'TIME');
-                    const detectedDate = dateEntitiesFiltered.length > 0 ? (dateEntitiesFiltered[0].value || dateEntitiesFiltered[0].text || dateEntitiesFiltered[0].word || 'none') : 'none';
-                    const detectedTime = timeEntitiesFiltered.length > 0 ? (timeEntitiesFiltered[0].value || timeEntitiesFiltered[0].text || timeEntitiesFiltered[0].word || 'none') : 'none';
-                    const detectedIntents = [];
-                    if (textToParse.match(/create|add|schedule|make/i)) detectedIntents.push('create');
-                    if (textToParse.match(/delete|remove|cancel/i)) detectedIntents.push('delete');
-                    if (textToParse.match(/go to|navigate|next|previous/i)) detectedIntents.push('navigate');
-                    
-                    let message = `Could not fully understand: "${textToParse}"\n\n`;
-                    message += `Detected:\n`;
-                    message += `- Date: ${detectedDate}\n`;
-                    message += `- Time: ${detectedTime}\n`;
-                    message += `- Intent: ${detectedIntents.join(', ') || 'unclear'}\n\n`;
-                    message += `Try being more specific:\n`;
-                    message += `• "Create event [name] tomorrow at 2pm"\n`;
-                    message += `• "Add meeting with John on Monday at 10am"\n`;
-                    message += `• "Delete event [name]" or "Remove [name]"`;
-                    
-                    alert(message);
-                }
+                // If ChatGPT fails to reason/parse, provide failure message
+                console.error('ChatGPT reasoning failed - no command returned');
+                console.error('Debug info:', {
+                    transcript: transcript.substring(0, 200),
+                    paragraphs: paragraphs.substring(0, 200),
+                    textToParse: textToParse.substring(0, 200),
+                    entities: entities
+                });
+                speak("Sorry, I was unable to hear the event");
             } else {
-                alert('No speech detected. Please speak more clearly or check your microphone permissions.');
+                speak("Sorry, I was unable to hear the event");
             }
         } catch (error) {
             console.error('Transcription error:', error);
-            let errorMessage = 'Error transcribing audio. ';
+            let errorMessage = "I'm having trouble understanding you right now. ";
             if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-                errorMessage += 'API key issue. Please check your Deepgram credentials.';
+                errorMessage += 'There seems to be an authentication issue.';
             } else if (error.message.includes('network') || error.message.includes('fetch')) {
-                errorMessage += 'Network error. Please check your internet connection.';
+                errorMessage += 'Check your internet connection and try again.';
             } else {
-                errorMessage += `${error.message}. Please try again.`;
+                errorMessage += `Let's try that again.`;
             }
-            alert(errorMessage);
+            speak(errorMessage);
         } finally {
             setIsProcessing(false);
         }
@@ -2558,19 +2648,73 @@ Return ONLY valid JSON, no other text.`;
 
     const stopRecording = () => {
         if (mediaRecorderRef.current) {
-            // Clear timeout if it exists
-            if (mediaRecorderRef.current.timeoutId) {
-                clearTimeout(mediaRecorderRef.current.timeoutId);
-                mediaRecorderRef.current.timeoutId = null;
-            }
             // Stop recording if it's active
             if (mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stop();
             }
         }
-        // Ensure recording state is reset
-        setIsRecording(false);
+        spacebarPressedRef.current = false;
+        isRecordingRef.current = false;
     };
+
+    // Store function refs for keyboard handlers - use useEffect to ensure they're set
+    useEffect(() => {
+        stopRecordingRef.current = stopRecording;
+    }, [stopRecording]);
+
+    // Keyboard event handlers
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            // Only handle spacebar, and ignore if user is typing in an input/textarea
+            if (event.code === 'Space' && event.target.tagName !== 'INPUT' && event.target.tagName !== 'TEXTAREA' && event.target.isContentEditable !== true) {
+                event.preventDefault();
+                // Use refs to check current state
+                if (!spacebarPressedRef.current && !isRecordingRef.current && !isProcessingRef.current) {
+                    spacebarPressedRef.current = true;
+                    // Call the function directly from ref (which is updated on every render)
+                    const startFn = startRecordingRef.current;
+                    if (startFn) {
+                        startFn();
+                    } else {
+                        console.warn('startRecordingRef not set');
+                    }
+                }
+            }
+        };
+
+        const handleKeyUp = (event) => {
+            if (event.code === 'Space' && event.target.tagName !== 'INPUT' && event.target.tagName !== 'TEXTAREA' && event.target.isContentEditable !== true) {
+                event.preventDefault();
+                // Use refs to check current state
+                if (spacebarPressedRef.current && isRecordingRef.current) {
+                    spacebarPressedRef.current = false;
+                    // Call the function directly from ref (which is updated on every render)
+                    const stopFn = stopRecordingRef.current;
+                    if (stopFn) {
+                        stopFn();
+                    } else {
+                        console.warn('stopRecordingRef not set');
+                    }
+                }
+            }
+        };
+
+        // Add event listeners
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+
+        return () => {
+            // Cleanup on unmount
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                mediaRecorderRef.current.stop();
+            }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, []); // Empty deps - handlers use refs which are always current
 
     const handleMicClick = () => {
         if (isRecording) {
@@ -2580,6 +2724,67 @@ Return ONLY valid JSON, no other text.`;
         }
         if (onSpeakClick) {
             onSpeakClick();
+        }
+    };
+
+    const addChatMessage = (text, isUser = true, isVoice = false) => {
+        setChatMessages(prev => [...prev, {
+            id: Date.now(),
+            text,
+            isUser,
+            isVoice,
+            timestamp: new Date()
+        }]);
+    };
+
+    const scrollChatToBottom = () => {
+        setTimeout(() => {
+            if (chatMessagesEndRef.current) {
+                chatMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+            }
+        }, 100);
+    };
+
+    useEffect(() => {
+        scrollChatToBottom();
+    }, [chatMessages]);
+
+    const handleChatToggle = () => {
+        setIsChatOpen(prev => !prev);
+        if (!isChatOpen) {
+            setTimeout(() => {
+                if (chatInputRef.current) {
+                    chatInputRef.current.focus();
+                }
+            }, 100);
+        }
+    };
+
+    const handleChatSubmit = async (e) => {
+        e.preventDefault();
+        if (!chatInput.trim()) return;
+
+        const userMessage = chatInput.trim();
+        setChatInput('');
+        addChatMessage(userMessage, true, false);
+
+        // Process the text message through ChatGPT
+        try {
+            setIsProcessing(true);
+            const entities = []; // No entities for text input
+            const llmCommand = await parseCommandWithLLM(userMessage, entities);
+            
+            if (llmCommand) {
+                executeCommand(llmCommand);
+                // The executeCommand will trigger speak() which will add the response to chat
+            } else {
+                addChatMessage("Sorry, I was unable to understand that command.", false, false);
+            }
+        } catch (error) {
+            console.error('Error processing chat message:', error);
+            addChatMessage("Sorry, I encountered an error processing your message.", false, false);
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -2631,14 +2836,93 @@ Return ONLY valid JSON, no other text.`;
                     </svg>
                 </button>
             </div>
-            <button className="day-structure-dario-btn" onClick={onAIChatClick}>
-                <div className="dario-icon-wrapper">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
-                    </svg>
-                </div>
-                <span className="dario-label">Dario</span>
-            </button>
+            {/* Chatbox Component */}
+            <div className="dario-chatbox-container">
+                {isChatOpen && (
+                    <div className="dario-chatbox">
+                        <div className="dario-chatbox-header">
+                            <div className="dario-chatbox-title">
+                                <div className="dario-icon-wrapper-small">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+                                    </svg>
+                                </div>
+                                <span>Dario</span>
+                            </div>
+                            <button 
+                                className="dario-chatbox-close"
+                                onClick={handleChatToggle}
+                            >
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="dario-chatbox-messages">
+                            {chatMessages.length === 0 ? (
+                                <div className="dario-chatbox-empty">
+                                    <p>Start a conversation with Dario</p>
+                                    <p className="dario-chatbox-hint">Type a message or use the microphone</p>
+                                </div>
+                            ) : (
+                                chatMessages.map((message) => (
+                                    <div 
+                                        key={message.id} 
+                                        className={`dario-chatbox-message ${message.isUser ? 'user' : 'ai'} ${message.isVoice ? 'voice' : ''}`}
+                                    >
+                                        <div className="dario-chatbox-message-content">
+                                            {message.isVoice && (
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="dario-voice-icon">
+                                                    <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+                                                </svg>
+                                            )}
+                                            <span>{message.text}</span>
+                                        </div>
+                                        <div className="dario-chatbox-message-time">
+                                            {message.timestamp.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                            <div ref={chatMessagesEndRef} />
+                        </div>
+                        <form className="dario-chatbox-input-form" onSubmit={handleChatSubmit}>
+                            <input
+                                ref={chatInputRef}
+                                type="text"
+                                className="dario-chatbox-input"
+                                placeholder="Type a message..."
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                disabled={isProcessing}
+                            />
+                            <button 
+                                type="submit" 
+                                className="dario-chatbox-send"
+                                disabled={isProcessing || !chatInput.trim()}
+                            >
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
+                                </svg>
+                            </button>
+                        </form>
+                    </div>
+                )}
+                <button 
+                    className={`day-structure-dario-btn ${isChatOpen ? 'active' : ''}`} 
+                    onClick={handleChatToggle}
+                >
+                    <div className="dario-icon-wrapper">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+                        </svg>
+                    </div>
+                    <span className="dario-label">Dario</span>
+                    {chatMessages.length > 0 && (
+                        <span className="dario-chat-badge">{chatMessages.length}</span>
+                    )}
+                </button>
+            </div>
         </div>
     );
 }
