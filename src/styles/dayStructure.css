@@ -8,7 +8,6 @@
     color: #ffffff;
     position: relative;
     overflow: hidden;
-    padding-bottom: 120px; /* Space for footer */
 }
 
 /* Top Header */
@@ -18,13 +17,15 @@
     padding: 16px;
     background-color: #000000;
     border-bottom: 1px solid #333333;
+    height: calc(100vh - 120px);
     min-height: 80px;
     gap: 16px;
+    box-sizing: border-box;
 }
 
 .day-structure-menu-btn {
     background: none;
-    border: 1px solid #ffffff;
+    border: none;
     cursor: pointer;
     padding: 8px;
     border-radius: 4px;
@@ -47,12 +48,16 @@
     gap: 8px;
     flex: 1;
     min-width: 0;
+    min-height: 0;
+    height: 100%;
 }
 
 .day-structure-column {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
+    height: 100%;
 }
 
 .day-structure-day-header {
@@ -76,7 +81,7 @@
 
 .day-structure-day-slot {
     flex: 1;
-    min-height: calc(100vh - 280px);
+    min-height: 0;
     border: 1px solid #333333;
     border-radius: 4px;
     padding: 8px;
@@ -151,7 +156,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 24px;
+    padding: 0 24px 16px 24px;
     background-color: #000000;
     border-top: 1px solid #333333;
     position: fixed;

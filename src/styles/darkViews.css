@@ -21,7 +21,7 @@
 .dark-menu-btn,
 .dark-profile-btn {
     background: none;
-    border: 1px solid #ffffff;
+    border: none;
     cursor: pointer;
     padding: 8px;
     border-radius: 4px;
