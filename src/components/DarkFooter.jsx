@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || 'dba3945f74f3e185269d2078564efeebecef9e29';
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+
+// #region agent log
+const apiKeyDebug = {hasDeepgram:!!DEEPGRAM_API_KEY,deepgramLength:DEEPGRAM_API_KEY?.length||0,hasOpenAI:!!OPENAI_API_KEY,openAILength:OPENAI_API_KEY?.length||0};console.log('🔍 DEBUG [A] API keys loaded:',apiKeyDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:5',message:'API keys loaded',data:apiKeyDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+// #endregion
 
 export default function DarkFooter({ 
     onCreateEvent, 
@@ -2900,8 +2905,15 @@ Return ONLY valid JSON, no other text. Make sure the JSON is properly formatted 
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
             
-            // Play the audio
-            await audio.play();
+            // Preload the audio for faster playback
+            audio.preload = 'auto';
+            
+            // Play the audio (don't await to avoid blocking)
+            audio.play().catch(err => {
+                console.error('Error playing audio:', err);
+                URL.revokeObjectURL(audioUrl);
+                fallbackSpeak(text);
+            });
             
             // Clean up the URL when audio finishes
             audio.onended = () => {
@@ -2927,7 +2939,7 @@ Return ONLY valid JSON, no other text. Make sure the JSON is properly formatted 
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 1.0;
+            utterance.rate = 1.2; // Increased rate for faster speech (1.0 = normal, 2.0 = double speed)
             utterance.pitch = 1.0;
             utterance.volume = 1.0;
             utterance.lang = 'en-US';
@@ -3214,6 +3226,65 @@ Return ONLY valid JSON, no other text. Make sure the JSON is properly formatted 
                 
                 // Add voice input to chat
                 addChatMessage(textToParse, true, true);
+                
+                // Check if this is a study/planning query before parsing as a command
+                const lowerTextToParse = textToParse.toLowerCase();
+                const studyPlanPatterns = [
+                    /study.*plan/i,
+                    /make.*study.*plan/i,
+                    /create.*study.*plan/i,
+                    /plan.*study/i,
+                    /study.*schedule/i,
+                    /study.*recommend/i,
+                    /best.*day.*study/i,
+                    /when.*study/i,
+                    /what.*day.*study/i,
+                    /study.*day/i,
+                    /time.*management/i,
+                    /workload/i,
+                    /busy.*day/i,
+                    /heavy.*work/i,
+                    /best.*time.*study/i,
+                    /analyze.*calendar/i,
+                    /which.*day.*free/i,
+                    /help.*me.*plan/i,
+                    /help.*me.*study/i,
+                    /recommend.*study/i,
+                    /suggest.*study/i,
+                    /recommend.*day/i,
+                    /suggest.*day/i,
+                    /schedule.*help/i,
+                    /calendar.*help/i,
+                    /help.*schedule/i,
+                    /advice.*study/i,
+                    /advice.*schedule/i,
+                    /how.*should.*i.*study/i,
+                    /when.*should.*i.*study/i,
+                    /make.*plan/i,
+                    /plan.*for/i,
+                    /study.*strategy/i,
+                    /study.*advice/i
+                ];
+                const isStudyDayQuery = studyPlanPatterns.some(pattern => pattern.test(lowerTextToParse));
+                
+                if (isStudyDayQuery) {
+                    console.log(`🔍 Voice: Study query detected! Routing to analyzeStudyDays for: "${textToParse}"`);
+                    // Route to study day analysis instead of command parsing
+                    try {
+                        setIsProcessing(true);
+                        const analysisResult = await analyzeStudyDays(textToParse);
+                        addChatMessage(analysisResult, false, false);
+                        speak(analysisResult, false); // Speak the response
+                    } catch (error) {
+                        console.error('Error in voice study query:', error);
+                        const errorMsg = "Sorry, I encountered an error analyzing your calendar. Please try again.";
+                        addChatMessage(errorMsg, false, false);
+                        speak(errorMsg, false);
+                    } finally {
+                        setIsProcessing(false);
+                    }
+                    return; // Exit early, don't parse as a command
+                }
                 
                 // Step 2: Deepgram reasons about what it heard using entity detection
                 // Deepgram is the PRIMARY reasoning engine - uses entity detection and parsing
@@ -3512,6 +3583,366 @@ Return ONLY valid JSON, no other text. Make sure the JSON is properly formatted 
         }
     };
 
+    // Analyze calendar events to suggest best study days based on workload
+    const analyzeStudyDays = async (userQuery) => {
+        // #region agent log
+        const entryDebug = {userQuery,hasOpenAIKey:!!OPENAI_API_KEY,eventsCount:events?.length||0};console.log('🔍 DEBUG [B] analyzeStudyDays entry:',entryDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3517',message:'analyzeStudyDays entry',data:entryDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+
+        if (!OPENAI_API_KEY) {
+            // #region agent log
+            console.log('🔍 DEBUG [A] OpenAI API key missing');fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3519',message:'OpenAI API key missing',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            return "I need an OpenAI API key to analyze your calendar. Please set VITE_OPENAI_API_KEY in your environment.";
+        }
+
+        try {
+            const today = new Date();
+            const currentDateStr = today.toISOString().split('T')[0];
+
+            // #region agent log
+            const eventsDebug = {eventsIsArray:Array.isArray(events),eventsLength:events?.length||0,eventsSample:events?.slice(0,2)?.map(e=>({hasStart:!!e.start,hasEnd:!!e.end,hasTitle:!!e.title}))};console.log('🔍 DEBUG [C] processing events:',eventsDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3527',message:'processing events',data:eventsDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+
+            // Format events with full details for analysis
+            // Safely handle events - filter out invalid events
+            const eventsDetails = (events || []).filter(e => e && e.start && e.end).map(e => {
+                try {
+                    const start = new Date(e.start);
+                    const end = new Date(e.end);
+                    
+                    // Validate dates
+                    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                        console.warn('Invalid date in event:', e);
+                        return null;
+                    }
+                    
+                    const duration = (end.getTime() - start.getTime()) / (1000 * 60); // duration in minutes
+                    return {
+                        title: e.title || 'Untitled Event',
+                        date: start.toISOString().split('T')[0],
+                        dayOfWeek: start.toLocaleDateString('en-US', { weekday: 'long' }),
+                        startTime: start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+                        endTime: end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+                        duration: Math.round(duration),
+                        description: e.description || ''
+                    };
+                } catch (err) {
+                    console.warn('Error processing event:', e, err);
+                    return null;
+                }
+            }).filter(e => e !== null); // Remove null entries
+
+            // #region agent log
+            const eventsDetailsDebug = {eventsDetailsCount:eventsDetails.length,eventsDetailsSample:eventsDetails.slice(0,2)};console.log('🔍 DEBUG [C] eventsDetails created:',eventsDetailsDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3540',message:'eventsDetails created',data:eventsDetailsDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+
+            // Group events by date to calculate daily workload
+            const eventsByDate = {};
+            eventsDetails.forEach(event => {
+                if (!eventsByDate[event.date]) {
+                    eventsByDate[event.date] = [];
+                }
+                eventsByDate[event.date].push(event);
+            });
+
+            // Calculate workload metrics for each day
+            const workloadAnalysis = Object.entries(eventsByDate).map(([date, dayEvents]) => {
+                const totalMinutes = dayEvents.reduce((sum, e) => sum + e.duration, 0);
+                const eventCount = dayEvents.length;
+                const dateObj = new Date(date);
+                return {
+                    date,
+                    dayOfWeek: dateObj.toLocaleDateString('en-US', { weekday: 'long' }),
+                    formattedDate: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                    totalHours: Math.round(totalMinutes / 60 * 10) / 10,
+                    eventCount,
+                    events: dayEvents
+                };
+            }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // #region agent log
+            const workloadDebug = {eventsDetailsCount:eventsDetails.length,workloadAnalysisCount:workloadAnalysis.length,workloadSample:workloadAnalysis.slice(0,3)};console.log('🔍 DEBUG [E] workload analysis calculated:',workloadDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3552',message:'workload analysis calculated',data:workloadDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion
+
+            const systemPrompt = `You are an intelligent calendar analysis and time management assistant. Your job is to analyze calendar events and create a personalized study plan with detailed reasoning.
+
+When the user asks to "make a study plan", "create a study plan", or similar queries:
+- Analyze the calendar workload distribution
+- Identify the BEST times for study sessions based on:
+  * Days with light workloads (fewer events, less total hours)
+  * Time gaps between existing events
+  * Patterns across the week
+  * Avoid heavy workload days
+- Create a comprehensive study plan with multiple study sessions
+- For EACH study session, provide:
+  * Specific date and time
+  * Reasoning explaining WHY this time was chosen (e.g., "Tuesday 2-4 PM: Light workload with only 1 hour of meetings, ideal for focused study")
+  * Duration (typically 1-3 hours per session)
+  
+You MUST return a JSON object with this structure:
+{
+  "reasoning": "Overall explanation of the study plan strategy (2-3 sentences)",
+  "studySessions": [
+    {
+      "title": "Study Session",
+      "date": "2024-01-15",
+      "startTime": "14:00",
+      "endTime": "16:00",
+      "reasoning": "Detailed explanation of why this time was chosen for this specific session"
+    },
+    ...
+  ]
+}
+
+IMPORTANT RULES:
+- Use ISO date format (YYYY-MM-DD) for dates
+- Use 24-hour time format (HH:MM) for times
+- Include 2-5 study sessions spread across the week
+- Provide detailed reasoning for EACH session placement
+- Ensure no conflicts with existing events
+- Focus on times with low workload or gaps between events`;
+
+            // Handle empty calendar case
+            if (workloadAnalysis.length === 0) {
+                const emptyCalendarResponse = `Based on your calendar, you currently have no scheduled events. This means you have complete flexibility for scheduling study time. 
+
+Here are some recommendations:
+- You can schedule study sessions at any time that works best for you
+- Consider establishing a regular study routine (e.g., same time each day)
+- Weekends are typically good for longer study sessions
+- Morning hours (8-11 AM) are often most productive for learning
+
+Would you like me to help you create a study schedule or add study sessions to your calendar?`;
+
+                // #region agent log
+                console.log('🔍 DEBUG [C] Empty calendar - returning default response');fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3620',message:'Empty calendar response',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                // #endregion
+                
+                return emptyCalendarResponse;
+            }
+
+            const userPrompt = `Current date: ${currentDateStr}
+
+CALENDAR EVENTS BY DAY:
+${JSON.stringify(workloadAnalysis, null, 2)}
+
+USER QUESTION: "${userQuery}"
+
+Analyze the calendar above and create a personalized study plan. For each study session, identify the best date and time based on workload, and provide detailed reasoning explaining WHY that specific time was chosen.
+
+Return a JSON object with "reasoning" (overall strategy) and "studySessions" (array of sessions with date, startTime, endTime, title, and reasoning for each).`;
+
+            // #region agent log
+            const apiCallDebug = {promptLength:userPrompt.length,systemPromptLength:systemPrompt.length,hasOpenAIKey:!!OPENAI_API_KEY};console.log('🔍 DEBUG [D] OpenAI API call before:',apiCallDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3588',message:'OpenAI API call before',data:apiCallDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: systemPrompt
+                        },
+                        {
+                            role: 'user',
+                            content: userPrompt
+                        }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 1500,
+                    response_format: { type: 'json_object' }
+                })
+            });
+
+            // #region agent log
+            const responseDebug = {status:response.status,ok:response.ok,statusText:response.statusText};console.log('🔍 DEBUG [D] OpenAI API response received:',responseDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3611',message:'OpenAI API response received',data:responseDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('OpenAI API error:', response.status, errorText);
+                // #region agent log
+                const errorDebug = {status:response.status,errorText:errorText.substring(0,200)};console.log('🔍 DEBUG [D] OpenAI API error:',errorDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3614',message:'OpenAI API error',data:errorDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+                
+                // Provide more specific error messages
+                if (response.status === 401) {
+                    return "I'm having trouble authenticating with the AI service. Please check that your OpenAI API key is set correctly in your .env file.";
+                } else if (response.status === 429) {
+                    return "The AI service is currently busy. Please wait a moment and try again.";
+                } else if (response.status >= 500) {
+                    return "The AI service is temporarily unavailable. Please try again in a few moments.";
+                } else {
+                    return `Sorry, I encountered an error analyzing your calendar (${response.status}). Please check your API key and try again.`;
+                }
+            }
+
+            let data;
+            try {
+                data = await response.json();
+            } catch (jsonError) {
+                console.error('Error parsing OpenAI response:', jsonError);
+                // #region agent log
+                const parseErrorDebug = {errorMessage:jsonError.message};console.log('🔍 DEBUG [D] JSON parse error:',parseErrorDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3666',message:'JSON parse error',data:parseErrorDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+                return "I received an invalid response from the AI service. Please try again.";
+            }
+
+            const content = data.choices?.[0]?.message?.content;
+
+            // #region agent log
+            const resultDebug = {hasResult:!!content,resultLength:content?.length||0,hasChoices:!!data.choices,choicesLength:data.choices?.length||0,dataKeys:Object.keys(data)};console.log('🔍 DEBUG [D] OpenAI API result parsed:',resultDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3618',message:'OpenAI API result parsed',data:resultDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+            // #endregion
+
+            if (!content) {
+                // #region agent log
+                const noResultDebug = {dataKeys:Object.keys(data),fullData:JSON.stringify(data).substring(0,500)};console.log('🔍 DEBUG [D] No analysis result:',noResultDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3621',message:'No analysis result',data:noResultDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+                return "I couldn't generate an analysis from the response. The AI service may be experiencing issues. Please try again.";
+            }
+
+            // Parse the JSON response
+            let studyPlan;
+            try {
+                // Remove markdown code blocks if present
+                let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                // Try to extract JSON if wrapped in text
+                const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    cleanedContent = jsonMatch[0];
+                }
+                studyPlan = JSON.parse(cleanedContent);
+                console.log('Parsed study plan:', studyPlan);
+            } catch (parseError) {
+                console.error('Error parsing study plan JSON:', parseError);
+                // #region agent log
+                const parseErrorDebug = {errorMessage:parseError.message,contentPreview:content.substring(0,200)};console.log('🔍 DEBUG [D] Study plan JSON parse error:',parseErrorDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3730',message:'Study plan JSON parse error',data:parseErrorDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+                return "I couldn't parse the study plan response. Please try again.";
+            }
+
+            // Validate study plan structure
+            if (!studyPlan.reasoning || !studyPlan.studySessions || !Array.isArray(studyPlan.studySessions)) {
+                console.error('Invalid study plan structure:', studyPlan);
+                return "The study plan response was missing required information. Please try again.";
+            }
+
+            // Create study plan events
+            const createdEvents = [];
+            const errors = [];
+
+            studyPlan.studySessions.forEach((session, index) => {
+                try {
+                    if (!session.date || !session.startTime || !session.endTime) {
+                        console.warn(`Session ${index} missing required fields:`, session);
+                        errors.push(`Session ${index + 1} is missing date or time information`);
+                        return;
+                    }
+
+                    // Parse date and time
+                    const [startHours, startMinutes] = session.startTime.split(':').map(Number);
+                    const [endHours, endMinutes] = session.endTime.split(':').map(Number);
+                    
+                    const sessionDate = new Date(session.date);
+                    sessionDate.setHours(startHours, startMinutes, 0, 0);
+                    
+                    const endDate = new Date(session.date);
+                    endDate.setHours(endHours, endMinutes, 0, 0);
+                    
+                    // Validate dates
+                    if (isNaN(sessionDate.getTime()) || isNaN(endDate.getTime())) {
+                        console.warn(`Session ${index} has invalid date/time:`, session);
+                        errors.push(`Session ${index + 1} has invalid date or time`);
+                        return;
+                    }
+
+                    // Ensure end is after start
+                    if (endDate <= sessionDate) {
+                        endDate.setDate(endDate.getDate() + 1); // Move to next day if needed
+                    }
+
+                    const eventData = {
+                        id: `${Date.now()}-${index}`,
+                        title: session.title || 'Study Session',
+                        start: sessionDate.toISOString(),
+                        end: endDate.toISOString(),
+                        description: session.reasoning || '',
+                        calendar: 'calendar',
+                        color: '#4CAF50' // Green color for study sessions
+                    };
+
+                    if (onAddEvent) {
+                        onAddEvent(eventData);
+                        createdEvents.push(eventData);
+                    }
+                } catch (error) {
+                    console.error(`Error creating session ${index}:`, error);
+                    errors.push(`Session ${index + 1}: ${error.message}`);
+                }
+            });
+
+            // Build response message with reasoning
+            let responseMessage = `${studyPlan.reasoning}\n\n`;
+            
+            if (createdEvents.length > 0) {
+                responseMessage += `I've created ${createdEvents.length} study session${createdEvents.length > 1 ? 's' : ''} on your calendar:\n\n`;
+                
+                createdEvents.forEach((event, index) => {
+                    const session = studyPlan.studySessions[index];
+                    const eventDate = new Date(event.start);
+                    const dateStr = eventDate.toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        month: 'short', 
+                        day: 'numeric'
+                    });
+                    const timeStr = eventDate.toLocaleTimeString('en-US', { 
+                        hour: 'numeric', 
+                        minute: '2-digit', 
+                        hour12: true 
+                    });
+                    const endTimeStr = new Date(event.end).toLocaleTimeString('en-US', { 
+                        hour: 'numeric', 
+                        minute: '2-digit', 
+                        hour12: true 
+                    });
+                    
+                    responseMessage += `• ${dateStr} from ${timeStr} to ${endTimeStr}: ${session.reasoning || 'Study session'}\n`;
+                });
+            }
+
+            if (errors.length > 0) {
+                responseMessage += `\nNote: ${errors.length} session(s) could not be created: ${errors.join(', ')}`;
+            }
+
+            // #region agent log
+            const successDebug = {createdEventsCount:createdEvents.length,errorsCount:errors.length};console.log('🔍 DEBUG [B] analyzeStudyDays success:',successDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3736',message:'analyzeStudyDays success',data:successDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+
+            return responseMessage;
+        } catch (error) {
+            console.error('Error analyzing study days:', error);
+            // #region agent log
+            const exceptionDebug = {errorMessage:error.message,errorStack:error.stack?.substring(0,300),errorName:error.name};console.log('🔍 DEBUG [G] analyzeStudyDays exception:',exceptionDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3626',message:'analyzeStudyDays exception',data:exceptionDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+            // #endregion
+            
+            // Provide more helpful error messages based on error type
+            if (error.message?.includes('fetch') || error.message?.includes('network')) {
+                return "I'm having trouble connecting to the AI service. Please check your internet connection and try again.";
+            } else if (error.message?.includes('API key') || error.message?.includes('authentication')) {
+                return "I'm having trouble authenticating. Please check that your OpenAI API key (VITE_OPENAI_API_KEY) is set correctly in your .env file.";
+            } else {
+                return `Sorry, I encountered an error while analyzing your calendar: ${error.message || 'Unknown error'}. Please check the browser console for more details and try again.`;
+            }
+        }
+    };
+
     const handleChatSubmit = async (e) => {
         e.preventDefault();
         if (!chatInput.trim()) return;
@@ -3520,23 +3951,102 @@ Return ONLY valid JSON, no other text. Make sure the JSON is properly formatted 
         setChatInput('');
         addChatMessage(userMessage, true, false);
 
-        // Process the text message through Deepgram entity-based parsing
+        // Check if user is asking about study days, workload analysis, study plans, time management, or help
+        const lowerMessage = userMessage.toLowerCase();
+        // More comprehensive pattern matching for study/planning queries
+        const studyPlanPatterns = [
+            /study.*plan/i,
+            /make.*study.*plan/i,
+            /create.*study.*plan/i,
+            /plan.*study/i,
+            /study.*schedule/i,
+            /study.*recommend/i,
+            /best.*day.*study/i,
+            /when.*study/i,
+            /what.*day.*study/i,
+            /study.*day/i,
+            /time.*management/i,
+            /workload/i,
+            /busy.*day/i,
+            /heavy.*work/i,
+            /best.*time.*study/i,
+            /analyze.*calendar/i,
+            /which.*day.*free/i,
+            /help.*me.*plan/i,
+            /help.*me.*study/i,
+            /recommend.*study/i,
+            /suggest.*study/i,
+            /recommend.*day/i,
+            /suggest.*day/i,
+            /schedule.*help/i,
+            /calendar.*help/i,
+            /help.*schedule/i,
+            /advice.*study/i,
+            /advice.*schedule/i,
+            /how.*should.*i.*study/i,
+            /when.*should.*i.*study/i,
+            /make.*plan/i,  // Catch "make a plan" queries
+            /plan.*for/i,   // Catch "plan for studying" queries
+            /study.*strategy/i,
+            /study.*advice/i
+        ];
+        const isStudyDayQuery = studyPlanPatterns.some(pattern => pattern.test(lowerMessage));
+        
+        // Debug: Log which pattern matched (if any)
+        if (isStudyDayQuery) {
+            const matchedPattern = studyPlanPatterns.findIndex(pattern => pattern.test(lowerMessage));
+            console.log(`🔍 Study query detected! Pattern #${matchedPattern} matched for: "${userMessage}"`);
+        } else {
+            console.log(`🔍 NOT a study query: "${userMessage}" - routing to command parser`);
+        }
+
+        // #region agent log
+        const chatEntryDebug = {userMessage,lowerMessage,isStudyDayQuery,eventsCount:events?.length||0};console.log('🔍 DEBUG [C] handleChatSubmit entry:',chatEntryDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3631',message:'handleChatSubmit entry',data:chatEntryDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+
         try {
             setIsProcessing(true);
-            const entities = []; // No entities for text input (would need to send to Deepgram for entity detection)
-            const command = parseVoiceCommandWithEntities(userMessage, entities, userMessage);
             
-            if (command) {
-                executeCommand(command);
-                // The executeCommand will trigger speak() which will add the response to chat
+            if (isStudyDayQuery) {
+                // #region agent log
+                console.log('🔍 DEBUG [F] routing to analyzeStudyDays:',{userMessage});fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3646',message:'routing to analyzeStudyDays',data:{userMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+                // #endregion
+                // Use workload analysis for study day questions
+                const analysisResult = await analyzeStudyDays(userMessage);
+                // #region agent log
+                const returnDebug = {hasResult:!!analysisResult,resultLength:analysisResult?.length||0};console.log('🔍 DEBUG [F] analyzeStudyDays returned:',returnDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3649',message:'analyzeStudyDays returned',data:returnDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+                // #endregion
+                addChatMessage(analysisResult, false, false);
             } else {
-                addChatMessage("Sorry, I was unable to understand that command. Try something like 'Create a meeting tomorrow at 2pm' or 'Add lunch with John on Monday at noon'.", false, false);
+                // #region agent log
+                console.log('🔍 DEBUG [F] routing to parseVoiceCommandWithEntities:',{userMessage});fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3651',message:'routing to parseVoiceCommandWithEntities',data:{userMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+                // #endregion
+                // Process as a regular command
+                const entities = []; // No entities for text input (would need to send to Deepgram for entity detection)
+                const command = parseVoiceCommandWithEntities(userMessage, entities, userMessage);
+                
+                // #region agent log
+                const commandDebug = {hasCommand:!!command,commandType:command?.type};console.log('🔍 DEBUG [F] command parsed:',commandDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3653',message:'command parsed',data:commandDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+                // #endregion
+                
+                if (command) {
+                    executeCommand(command);
+                    // The executeCommand will trigger speak() which will add the response to chat
+                } else {
+                    addChatMessage("Sorry, I was unable to understand that command. Try something like 'Create a meeting tomorrow at 2pm' or 'Add lunch with John on Monday at noon'.", false, false);
+                }
             }
         } catch (error) {
             console.error('Error processing chat message:', error);
+            // #region agent log
+            const chatExceptionDebug = {errorMessage:error.message,errorStack:error.stack?.substring(0,300)};console.log('🔍 DEBUG [G] handleChatSubmit exception:',chatExceptionDebug);fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3663',message:'handleChatSubmit exception',data:chatExceptionDebug,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+            // #endregion
             addChatMessage("Sorry, I encountered an error processing your message.", false, false);
         } finally {
             setIsProcessing(false);
+            // #region agent log
+            console.log('🔍 DEBUG [C] handleChatSubmit complete');fetch('http://127.0.0.1:7242/ingest/06b11747-44fe-4bad-978e-4e9d2d7d8909',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DarkFooter.jsx:3669',message:'handleChatSubmit complete',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
         }
     };
 
