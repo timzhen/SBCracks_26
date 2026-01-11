@@ -69,6 +69,7 @@
     width: 80px;
     min-width: 80px;
     border-right: 1px solid #333333;
+    background-color: #000000;
 }
 
 .dark-day-title {
@@ -83,6 +84,7 @@
     display: flex;
     height: calc(100vh - 150px);
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .dark-time-column {
@@ -90,16 +92,23 @@
     min-width: 80px;
     border-right: 1px solid #333333;
     padding: 0;
+    background-color: #000000;
+    position: sticky;
+    left: 0;
+    z-index: 5;
 }
 
 .dark-time-slot {
     height: 60px;
-    border-bottom: 1px solid #333333;
+    border-bottom: 1px solid #404040;
     padding-right: 8px;
     text-align: right;
-    font-size: 12px;
-    color: #cccccc;
-    padding-top: 2px;
+    font-size: 11px;
+    color: #888888;
+    padding-top: 4px;
+    background-color: #000000;
+    box-sizing: border-box;
+    flex-shrink: 0;
 }
 
 .dark-day-grid {
@@ -107,6 +116,8 @@
     border-right: 1px solid #333333;
     position: relative;
     min-height: 1440px;
+    overflow-x: hidden;
+    overflow-y: visible;
 }
 
 .dark-day-hour-slot {
@@ -122,8 +133,6 @@
 
 .dark-day-event {
     position: absolute;
-    left: 2px;
-    right: 2px;
     padding: 4px 6px;
     border-radius: 4px;
     font-size: 12px;
@@ -132,6 +141,7 @@
     overflow: hidden;
     z-index: 5;
     border-left: 3px solid;
+    box-sizing: border-box;
 }
 
 .dark-event-title {
@@ -161,6 +171,7 @@
     padding: 12px;
     text-align: center;
     border-right: 1px solid #333333;
+    background-color: #000000;
 }
 
 .dark-week-day-name {
@@ -185,6 +196,7 @@
     display: flex;
     height: calc(100vh - 200px);
     overflow-y: auto;
+    background-color: #000000;
 }
 
 .dark-week-grid {
@@ -192,23 +204,30 @@
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     border-right: 1px solid #333333;
+    background-color: #000000;
 }
 
 .dark-week-day-column {
     border-right: 1px solid #333333;
     position: relative;
     min-height: 1440px;
+    background-color: #0a0a0a;
+    display: flex;
+    flex-direction: column;
 }
 
 .dark-week-hour-slot {
     height: 60px;
-    border-bottom: 1px solid #333333;
+    border-bottom: 1px solid #404040;
     position: relative;
     cursor: pointer;
+    background-color: #0a0a0a;
+    box-sizing: border-box;
+    flex-shrink: 0;
 }
 
 .dark-week-hour-slot:hover {
-    background-color: #1a1a1a;
+    background-color: #151515;
 }
 
 .dark-week-event {
@@ -427,4 +446,3 @@
 .dark-week-body::-webkit-scrollbar-thumb:hover {
     background: #777777;
 }
-
