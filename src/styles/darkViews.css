@@ -249,6 +249,24 @@
     padding: 16px;
 }
 
+.dark-month-header {
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.dark-month-name {
+    font-size: 28px;
+    font-weight: 500;
+    color: #ffffff;
+    margin-bottom: 4px;
+}
+
+.dark-month-year {
+    font-size: 10px;
+    color: #888888;
+    font-weight: 400;
+}
+
 .dark-month-weekdays {
     display: grid;
     grid-template-columns: repeat(7, 1fr);

@@ -301,6 +301,40 @@
     }
 }
 
+/* Footer Center Container */
+.day-structure-footer-center {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: center;
+}
+
+/* Arrow Buttons */
+.day-structure-arrow-btn {
+    background: none;
+    border: 1px solid #ffffff;
+    cursor: pointer;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.day-structure-arrow-btn:hover {
+    background-color: #333333;
+    border-color: #555555;
+    transform: scale(1.1);
+}
+
+.day-structure-arrow-btn:active {
+    transform: scale(0.95);
+}
+
 /* Dario AI Chatbot Button - Bottom Right */
 .day-structure-dario-btn {
     background: none;

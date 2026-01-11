@@ -101,6 +101,10 @@ export default function DarkMonthView({
         return days;
     };
 
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthName = monthNames[month];
+
     return (
         <div className="dark-view-container">
             <DarkHeader
@@ -109,6 +113,10 @@ export default function DarkMonthView({
                 onProfileClick={() => console.log('Profile clicked')}
             />
             <div className="dark-month-view">
+                <div className="dark-month-header">
+                    <div className="dark-month-name">{monthName}</div>
+                    <div className="dark-month-year">{year}</div>
+                </div>
                 <div className="dark-month-weekdays">
                     <div className="dark-weekday">Sun</div>
                     <div className="dark-weekday">Mon</div>
