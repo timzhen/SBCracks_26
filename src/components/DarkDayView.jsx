@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { formatHour, getEventsForDate } from '../utils/dateUtils';
+import { calculateEventLayout } from '../utils/eventLayout';
 import DarkHeader from './DarkHeader';
 import DarkFooter from './DarkFooter';
 
@@ -14,6 +15,11 @@ export default function DarkDayView({ currentDate, events, onHourClick, onEventC
         year: 'numeric'
     });
 
+    const dayEvents = useMemo(() => {
+        const eventsForDay = getEventsForDate(events, normalizedDate);
+        return calculateEventLayout(eventsForDay);
+    }, [events, normalizedDate]);
+
     const createEventElement = (event) => {
         const startDate = new Date(event.start);
         const endDate = new Date(event.end);
@@ -26,6 +32,33 @@ export default function DarkDayView({ currentDate, events, onHourClick, onEventC
 
         const timeStr = `${formatHour(startDate.getHours())}${startDate.getMinutes() > 0 ? ':' + String(startDate.getMinutes()).padStart(2, '0') : ''}`;
 
+        // Calculate width and left position for overlapping events
+        const columns = event.columns || 1;
+        const column = event.column !== undefined ? event.column : 0;
+        
+        // Gap between overlapping events (2px)
+        const gap = 2;
+        
+        // Width: divide space equally, accounting for gaps
+        // Formula: (100% - (columns-1)*gap) / columns
+        const totalGapSpace = (columns - 1) * gap;
+        const widthCalc = columns > 1 
+            ? `calc((100% - ${totalGapSpace}px) / ${columns})`
+            : '100%';
+        
+        // Left position: 
+        // For column 0: left = 0
+        // For column n: left = n * (100% / columns) + n * (gap - totalGapSpace / columns)
+        // Since totalGapSpace = (columns - 1) * gap:
+        // gap - totalGapSpace / columns = gap - (columns - 1) * gap / columns = gap / columns
+        // So: left = n * (100% / columns) + n * gap / columns = n * (100% + gap) / columns
+        let leftCalc = '0px';
+        if (column > 0 && columns > 1) {
+            const widthPercent = 100 / columns;
+            const gapOffset = gap - totalGapSpace / columns; // This equals gap / columns
+            leftCalc = `calc(${column} * ${widthPercent}% + ${column} * ${gapOffset}px)`;
+        }
+
         return (
             <div
                 key={event.id}
@@ -34,6 +67,8 @@ export default function DarkDayView({ currentDate, events, onHourClick, onEventC
                     position: 'absolute',
                     top: `${top}px`,
                     height: `${height}px`,
+                    left: leftCalc,
+                    width: widthCalc,
                     backgroundColor: event.color,
                     borderLeftColor: event.color,
                 }}
@@ -60,8 +95,6 @@ export default function DarkDayView({ currentDate, events, onHourClick, onEventC
         }
         return timeSlots;
     };
-
-    const dayEvents = getEventsForDate(events, normalizedDate);
 
     return (
         <div className="dark-view-container">
