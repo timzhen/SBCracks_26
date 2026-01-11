@@ -81,23 +81,43 @@ export default function DayStructureView({
                                     <div className="day-structure-day-name">{day.name}</div>
                                     <div className="day-structure-day-date">{day.dateStr}</div>
                                 </div>
-                                <div 
-                                    className="day-structure-day-slot"
-                                    onClick={() => handleDaySlotClick(day.date)}
-                                >
-                                    {dayEvents.map(event => (
-                                        <div 
-                                            key={event.id}
-                                            className="day-structure-event-item"
-                                            style={{ backgroundColor: event.color }}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onDayClick(new Date(event.start));
-                                            }}
-                                        >
-                                            {event.title}
-                                        </div>
-                                    ))}
+                                <div className="day-structure-day-slot">
+                                    {Array.from({ length: 24 }, (_, hour) => {
+                                        const hourEvents = dayEvents.filter(event => {
+                                            const eventDate = new Date(event.start);
+                                            return eventDate.getHours() === hour;
+                                        });
+                                        
+                                        return (
+                                            <div
+                                                key={hour}
+                                                className="day-structure-hour-slot"
+                                                onClick={() => handleDaySlotClick(day.date, hour)}
+                                            >
+                                                <div className="day-structure-hour-label">
+                                                    {hour === 0 ? '12 AM' : 
+                                                     hour < 12 ? `${hour} AM` :
+                                                     hour === 12 ? '12 PM' :
+                                                     `${hour - 12} PM`}
+                                                </div>
+                                                <div className="day-structure-hour-content">
+                                                    {hourEvents.map(event => (
+                                                        <div
+                                                            key={event.id}
+                                                            className="day-structure-event-item"
+                                                            style={{ backgroundColor: event.color }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onDayClick(new Date(event.start));
+                                                            }}
+                                                        >
+                                                            {event.title}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         );

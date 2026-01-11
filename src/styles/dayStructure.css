@@ -82,16 +82,15 @@
 .day-structure-day-slot {
     flex: 1;
     min-height: 0;
+    height: 263px;
     border: 1px solid #333333;
     border-radius: 4px;
-    padding: 8px;
     background-color: #1a1a1a;
-    cursor: pointer;
     transition: border-color 0.2s, background-color 0.2s;
     display: flex;
     flex-direction: column;
-    gap: 4px;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .day-structure-day-slot:hover {
@@ -99,10 +98,48 @@
     background-color: #222222;
 }
 
+.day-structure-hour-slot {
+    display: flex;
+    border-bottom: 1px solid #2a2a2a;
+    min-height: 44px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.day-structure-hour-slot:hover {
+    background-color: #222222;
+}
+
+.day-structure-hour-slot:last-child {
+    border-bottom: none;
+}
+
+.day-structure-hour-label {
+    width: 32px;
+    padding: 4px 4px;
+    font-size: 10px;
+    color: #888888;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    border-right: 1px solid #2a2a2a;
+    flex-shrink: 0;
+    padding-top: 6px;
+}
+
+.day-structure-hour-content {
+    flex: 1;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
 .day-structure-event-item {
-    padding: 6px 8px;
-    border-radius: 4px;
-    font-size: 12px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 11px;
     font-weight: 500;
     color: #ffffff;
     cursor: pointer;
