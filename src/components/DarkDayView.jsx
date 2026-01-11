@@ -4,7 +4,20 @@ import { calculateEventLayout } from '../utils/eventLayout';
 import DarkHeader from './DarkHeader';
 import DarkFooter from './DarkFooter';
 
-export default function DarkDayView({ currentDate, events, onHourClick, onEventClick, onCreateEvent, onViewChange, currentView }) {
+export default function DarkDayView({ 
+    currentDate, 
+    events, 
+    onHourClick, 
+    onEventClick, 
+    onCreateEvent, 
+    onViewChange, 
+    currentView,
+    onAddEvent,
+    onUpdateEvent,
+    onDeleteEvent,
+    onNavigateDate,
+    onGoToToday
+}) {
     const normalizedDate = new Date(currentDate);
     normalizedDate.setHours(0, 0, 0, 0);
 
@@ -130,6 +143,15 @@ export default function DarkDayView({ currentDate, events, onHourClick, onEventC
                 onCreateEvent={onCreateEvent}
                 onSpeakClick={() => console.log('Voice assistant activated')}
                 onAIChatClick={() => console.log('Dario AI Chatbot clicked')}
+                onAddEvent={onAddEvent}
+                onUpdateEvent={onUpdateEvent}
+                onDeleteEvent={onDeleteEvent}
+                onNavigateDate={onNavigateDate}
+                onGoToToday={onGoToToday}
+                onSwitchView={onViewChange}
+                currentDate={currentDate}
+                currentView={currentView}
+                events={events}
             />
         </div>
     );

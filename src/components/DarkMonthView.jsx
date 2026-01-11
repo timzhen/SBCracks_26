@@ -3,7 +3,20 @@ import { getEventsForDate } from '../utils/dateUtils';
 import DarkHeader from './DarkHeader';
 import DarkFooter from './DarkFooter';
 
-export default function DarkMonthView({ currentDate, events, onDayClick, onEventClick, onCreateEvent, onViewChange, currentView }) {
+export default function DarkMonthView({ 
+    currentDate, 
+    events, 
+    onDayClick, 
+    onEventClick, 
+    onCreateEvent, 
+    onViewChange, 
+    currentView,
+    onAddEvent,
+    onUpdateEvent,
+    onDeleteEvent,
+    onNavigateDate,
+    onGoToToday
+}) {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
@@ -113,6 +126,15 @@ export default function DarkMonthView({ currentDate, events, onDayClick, onEvent
                 onCreateEvent={onCreateEvent}
                 onSpeakClick={() => console.log('Voice assistant activated')}
                 onAIChatClick={() => console.log('Dario AI Chatbot clicked')}
+                onAddEvent={onAddEvent}
+                onUpdateEvent={onUpdateEvent}
+                onDeleteEvent={onDeleteEvent}
+                onNavigateDate={onNavigateDate}
+                onGoToToday={onGoToToday}
+                onSwitchView={onViewChange}
+                currentDate={currentDate}
+                currentView={currentView}
+                events={events}
             />
         </div>
     );

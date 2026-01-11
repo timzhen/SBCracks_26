@@ -88,6 +88,11 @@ export default function App() {
                         onCreateEvent={handleCreateEvent}
                         onViewChange={switchView}
                         currentView={currentView}
+                        onAddEvent={addEvent}
+                        onUpdateEvent={updateEvent}
+                        onDeleteEvent={deleteEvent}
+                        onNavigateDate={navigateDate}
+                        onGoToToday={goToToday}
                     />
                 )}
                 {currentView === 'day' && (
@@ -99,6 +104,11 @@ export default function App() {
                         onCreateEvent={handleCreateEvent}
                         onViewChange={switchView}
                         currentView={currentView}
+                        onAddEvent={addEvent}
+                        onUpdateEvent={updateEvent}
+                        onDeleteEvent={deleteEvent}
+                        onNavigateDate={navigateDate}
+                        onGoToToday={goToToday}
                     />
                 )}
                 {currentView === 'month' && (
@@ -110,6 +120,11 @@ export default function App() {
                         onCreateEvent={handleCreateEvent}
                         onViewChange={switchView}
                         currentView={currentView}
+                        onAddEvent={addEvent}
+                        onUpdateEvent={updateEvent}
+                        onDeleteEvent={deleteEvent}
+                        onNavigateDate={navigateDate}
+                        onGoToToday={goToToday}
                     />
                 )}
                 <EventModal

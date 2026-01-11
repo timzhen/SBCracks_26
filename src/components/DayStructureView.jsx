@@ -1,8 +1,21 @@
 import React, { useState } from 'react';
 import { getEventsForDate } from '../utils/dateUtils';
 import ViewMenu from './ViewMenu';
+import DarkFooter from './DarkFooter';
 
-export default function DayStructureView({ currentDate, events, onDayClick, onCreateEvent, onViewChange, currentView }) {
+export default function DayStructureView({ 
+    currentDate, 
+    events, 
+    onDayClick, 
+    onCreateEvent, 
+    onViewChange, 
+    currentView,
+    onAddEvent,
+    onUpdateEvent,
+    onDeleteEvent,
+    onNavigateDate,
+    onGoToToday
+}) {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     // Get start of week (Sunday)
     const startOfWeek = new Date(currentDate);
@@ -29,8 +42,8 @@ export default function DayStructureView({ currentDate, events, onDayClick, onCr
     };
 
     const handleSpeakClick = () => {
-        // TODO: Implement voice assistant to schedule events or ask questions
-        console.log('Voice assistant activated - speak to schedule events or ask questions');
+        // Voice assistant is handled by DarkFooter
+        console.log('Voice assistant activated');
     };
 
     const handleMenuClick = () => {
@@ -101,27 +114,20 @@ export default function DayStructureView({ currentDate, events, onDayClick, onCr
             </div>
 
             {/* Footer */}
-            <div className="day-structure-footer">
-                <button className="day-structure-create-btn" onClick={onCreateEvent}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/>
-                    </svg>
-                    <span>Create Event</span>
-                </button>
-                <button className="day-structure-mic-btn" onClick={handleSpeakClick}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="currentColor"/>
-                    </svg>
-                </button>
-                <button className="day-structure-dario-btn" onClick={handleAIChatClick}>
-                    <div className="dario-icon-wrapper">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
-                        </svg>
-                    </div>
-                    <span className="dario-label">Dario</span>
-                </button>
-            </div>
+            <DarkFooter
+                onCreateEvent={onCreateEvent}
+                onSpeakClick={handleSpeakClick}
+                onAIChatClick={handleAIChatClick}
+                onAddEvent={onAddEvent}
+                onUpdateEvent={onUpdateEvent}
+                onDeleteEvent={onDeleteEvent}
+                onNavigateDate={onNavigateDate}
+                onGoToToday={onGoToToday}
+                onSwitchView={onViewChange}
+                currentDate={currentDate}
+                currentView={currentView}
+                events={events}
+            />
             <ViewMenu
                 isOpen={isMenuOpen}
                 onClose={() => setIsMenuOpen(false)}

@@ -210,6 +210,55 @@
     transform: scale(0.95);
 }
 
+/* Recording state */
+.day-structure-mic-btn.recording {
+    background-color: #ea4335;
+    box-shadow: 0 0 20px rgba(234, 67, 53, 0.8);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.day-structure-mic-btn.recording:hover {
+    background-color: #d33b2c;
+    box-shadow: 0 0 25px rgba(234, 67, 53, 1);
+}
+
+/* Processing state */
+.day-structure-mic-btn.processing {
+    background-color: #fbbc04;
+    box-shadow: 0 0 15px rgba(251, 188, 4, 0.6);
+    animation: spin 1s linear infinite;
+}
+
+.day-structure-mic-btn.processing:hover {
+    background-color: #f9ab00;
+}
+
+.day-structure-mic-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Animations */
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(234, 67, 53, 0.8);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 30px rgba(234, 67, 53, 1);
+        transform: scale(1.05);
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 /* Dario AI Chatbot Button - Bottom Right */
 .day-structure-dario-btn {
     background: none;
