@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || 'dba3945f74f3e185269d2078564efeebecef9e29';
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 
 export default function DarkFooter({ 
     onCreateEvent, 
@@ -44,9 +43,30 @@ export default function DarkFooter({
 
     // LLM-powered command parsing using OpenAI
     const parseCommandWithLLM = async (transcript, entities) => {
+        // Always return a command, never null
+        const createDefaultEvent = () => {
+            const today = new Date();
+            today.setHours(9, 0, 0, 0);
+            const endTime = new Date(today);
+            endTime.setHours(today.getHours() + 1);
+            let title = transcript.split(' ').slice(0, 5).join(' ').trim() || 'New Event';
+            title = title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+            return {
+                type: 'createEvent',
+                event: {
+                    title: title,
+                    start: today.toISOString(),
+                    end: endTime.toISOString(),
+                    description: '',
+                    calendar: 'calendar',
+                    color: '#4285F4'
+                }
+            };
+        };
+
         if (!OPENAI_API_KEY) {
-            console.warn('OpenAI API key not set. Falling back to entity-based parsing.');
-            return null;
+            console.warn('OpenAI API key not set. Using default event.');
+            return createDefaultEvent();
         }
 
         const today = new Date();
@@ -77,7 +97,7 @@ export default function DarkFooter({
             };
         });
 
-        const prompt = `You are an intelligent calendar assistant that understands voice commands and can reason about calendar changes. Parse the following user command and return a JSON object with the appropriate command structure.
+        const prompt = `You are an intelligent calendar assistant. Your job is to parse user commands and return a JSON object. ALWAYS return a valid JSON object - never return null or empty responses.
 
 Current date and time: ${currentDateStr} ${currentTimeStr}
 
@@ -88,9 +108,50 @@ User command: "${transcript}"
 
 ${entityInfo.length > 0 ? `Detected entities: ${JSON.stringify(entityInfo)}` : ''}
 
+CRITICAL INSTRUCTIONS FOR TITLE EXTRACTION:
+1. IGNORE instruction words/phrases - these are NOT part of the title:
+   - "create", "add", "schedule", "make", "set up", "book"
+   - "an event", "a meeting", "an appointment", "a task"
+   - "for", "on", "at", "tomorrow", "today", "next week"
+   - "name it", "call it", "title it", "titled"
+   - Time phrases: "at 8am", "at 08:30", "from 9 to 10"
+   - Date phrases: "tomorrow", "on Monday", "January 15th"
+
+2. EXTRACT the actual event title from:
+   - What comes after "name it", "call it", "title it", "titled", "named"
+   - The main subject/topic of the event (e.g., "demoing", "hackathon demoing", "doctor appointment")
+   - If user says "name it X", then X is the title
+   - If user says "create X", extract X (but remove instruction words)
+
+3. TITLE EXAMPLES:
+   - "Create an event tomorrow at 08:30AM. Name it demoing" → title: "Demoing"
+   - "Create an event tomorrow at 08:30AM. Name it hackathon demoing" → title: "Hackathon Demoing"
+   - "Add meeting with John tomorrow" → title: "Meeting With John"
+   - "Schedule doctor appointment at 2pm" → title: "Doctor Appointment"
+   - "Make a task called finish project" → title: "Finish Project"
+
+4. DATE/TIME PARSING:
+   - Parse dates: "tomorrow" = ${new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]}
+   - Parse times: "08:30AM" = 08:30:00, "8:30 am" = 08:30:00, "2pm" = 14:00:00
+   - If no date specified, use today: ${currentDateStr}
+   - If no time specified, use 9:00 AM as default start time
+   - Always include both start and end times (end = start + 1 hour if not specified)
+
+5. ALWAYS return a valid JSON object with a "type" field
+
 Return a JSON object with ONE of these structures:
 
 1. CREATE EVENT:
+CRITICAL TITLE EXTRACTION RULES:
+- Remove instruction words: "create", "add", "schedule", "make", "an event", "a meeting"
+- Remove date/time phrases: "tomorrow", "on Monday", "at 8am", "at 08:30AM"
+- If user says "name it X" or "call it X", use X as the title
+- Extract the actual subject/topic, not the instruction
+- Examples:
+  * "Create an event tomorrow at 08:30AM. Name it demoing" → title: "Demoing"
+  * "Create an event tomorrow at 08:30AM. Name it hackathon demoing" → title: "Hackathon Demoing"
+  * "Add meeting with John" → title: "Meeting With John"
+
 IMPORTANT: When user specifies a time interval like "8 pm to 10 pm", you MUST use those exact times:
 - "8 pm to 10 pm" on January 15th → start: "2024-01-15T20:00:00", end: "2024-01-15T22:00:00"
 - DO NOT use random or default times when a time interval is explicitly stated
@@ -98,7 +159,7 @@ IMPORTANT: When user specifies a time interval like "8 pm to 10 pm", you MUST us
 {
   "type": "createEvent",
   "event": {
-    "title": "Event title (capitalize first letter of each word, extract action phrase like 'pick up kids' not full sentence)",
+    "title": "Event title (ONLY the actual event name/topic, NOT instruction words or date/time phrases)",
     "start": "ISO 8601 datetime string (REQUIRED - use exact time from user's time interval)",
     "end": "ISO 8601 datetime string (REQUIRED - use exact time from user's time interval)",
     "description": "optional description",
@@ -237,8 +298,14 @@ CREATING EVENTS:
 - For all-day events: ONLY for birthdays, graduations, and anniversaries (unless time range is specified). For others, require explicit "all day" phrase.
 - For all-day events: start should be 00:00:00, end should be 23:59:59 on same day.
 - Time ranges override all-day: If time range mentioned (e.g., "1-5", "12-1", "8pm to 10pm"), it's NOT all-day.
-- Extract clean titles: "I need to pick up the kids at 3pm" -> title: "Pick Up Kids", not the whole sentence.
+- Extract clean titles: Remove instruction words and date/time phrases
+  * "Create an event tomorrow at 08:30AM. Name it demoing" → title: "Demoing"
+  * "I need to pick up the kids at 3pm" → title: "Pick Up Kids"
+  * "Add meeting with John tomorrow" → title: "Meeting With John"
+- If user explicitly says "name it X", "call it X", or "titled X", use X as the title
 - Capitalize title: First letter of each word should be capitalized.
+- NEVER include instruction words like "create", "add", "schedule" in the title
+- NEVER include date/time phrases like "tomorrow", "at 8am" in the title
 
 EDITING EVENTS (CRITICAL):
 - Match events by title similarity: "my meeting" matches "Team Meeting", "doctor" matches "Doctor Appointment"
@@ -265,12 +332,16 @@ DATE/TIME REASONING:
 - If no time specified, use current time or a reasonable default (e.g., 9:00 AM)
 
 CRITICAL: You MUST always return a valid JSON object. Never return null or empty responses.
-- If the command is unclear, make your best interpretation and return a createEvent with reasonable defaults
-- If date/time is unclear, use today's date and current time (or 9:00 AM if no time context)
-- Extract the main action/task from the user's command as the title
+- If the command is unclear or ambiguous, DEFAULT to creating an event (type: "createEvent")
+- If date/time is unclear, use today's date (${currentDateStr}) and 9:00 AM as default start time
+- Extract the main action/task from the user's command as the title (capitalize first letter of each word)
 - Always include both start and end times (if only start time given, add 1 hour for end time)
+- For dates: "today" = ${currentDateStr}, "tomorrow" = ${new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]}
+- For times: Parse any time mentioned, or default to 09:00:00
+- Example: "meeting" → {"type":"createEvent","event":{"title":"Meeting","start":"${currentDateStr}T09:00:00","end":"${currentDateStr}T10:00:00","description":"","calendar":"calendar","color":"#4285F4"}}
+- Example: "doctor appointment tomorrow at 2pm" → {"type":"createEvent","event":{"title":"Doctor Appointment","start":"${new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]}T14:00:00","end":"${new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]}T15:00:00","description":"","calendar":"calendar","color":"#4285F4"}}
 
-Return ONLY valid JSON, no other text.`;
+Return ONLY valid JSON, no other text. Make sure the JSON is properly formatted and can be parsed.`;
 
         try {
             const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -291,8 +362,9 @@ Return ONLY valid JSON, no other text.`;
                             content: prompt
                         }
                     ],
-                    temperature: 0.3, // Lower temperature for more consistent parsing
-                    response_format: { type: 'json_object' }
+                    temperature: 0.1, // Very low temperature for strict adherence to instructions
+                    response_format: { type: 'json_object' },
+                    top_p: 0.9 // Focus on most likely tokens
                 })
             });
 
@@ -303,11 +375,24 @@ Return ONLY valid JSON, no other text.`;
             }
 
             const data = await response.json();
+            console.log('Full OpenAI API response:', JSON.stringify(data, null, 2));
+            
             const content = data.choices?.[0]?.message?.content;
             if (!content) {
                 console.error('No content in OpenAI response');
                 console.error('Full API response:', data);
-                return null;
+                // Return a default createEvent instead of null
+                return {
+                    type: 'createEvent',
+                    event: {
+                        title: transcript.split(' ').slice(0, 5).join(' ').trim() || 'New Event',
+                        start: new Date(new Date().setHours(9, 0, 0, 0)).toISOString(),
+                        end: new Date(new Date().setHours(10, 0, 0, 0)).toISOString(),
+                        description: '',
+                        calendar: 'calendar',
+                        color: '#4285F4'
+                    }
+                };
             }
 
             console.log('OpenAI response content:', content);
@@ -316,43 +401,95 @@ Return ONLY valid JSON, no other text.`;
             let llmCommand;
             try {
                 // Remove markdown code blocks if present
-                const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                let cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                // Try to extract JSON if wrapped in text
+                const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    cleanedContent = jsonMatch[0];
+                }
                 llmCommand = JSON.parse(cleanedContent);
                 console.log('Parsed LLM command:', llmCommand);
             } catch (parseError) {
                 console.error('Error parsing LLM JSON response:', parseError);
                 console.error('Raw content:', content);
                 console.error('Cleaned content attempt:', content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
-                return null;
+                // Return a default createEvent instead of null
+                return {
+                    type: 'createEvent',
+                    event: {
+                        title: transcript.split(' ').slice(0, 5).join(' ').trim() || 'New Event',
+                        start: new Date(new Date().setHours(9, 0, 0, 0)).toISOString(),
+                        end: new Date(new Date().setHours(10, 0, 0, 0)).toISOString(),
+                        description: '',
+                        calendar: 'calendar',
+                        color: '#4285F4'
+                    }
+                };
             }
 
             // Validate and convert the LLM response to our command format
-            if (llmCommand.type === 'createEvent' && llmCommand.event) {
+            // If no type is specified, default to createEvent
+            if (!llmCommand.type) {
+                console.warn('No type in LLM response, defaulting to createEvent');
+                llmCommand.type = 'createEvent';
+            }
+
+            if (llmCommand.type === 'createEvent') {
+                // If event object is missing, create a default one
+                if (!llmCommand.event) {
+                    console.warn('No event object in LLM response, creating default');
+                    const today = new Date();
+                    today.setHours(9, 0, 0, 0);
+                    const endTime = new Date(today);
+                    endTime.setHours(today.getHours() + 1);
+                    
+                    llmCommand.event = {
+                        title: transcript.substring(0, 50) || 'New Event',
+                        start: today.toISOString(),
+                        end: endTime.toISOString(),
+                        description: '',
+                        calendar: 'calendar',
+                        color: '#4285F4'
+                    };
+                }
+
                 // Ensure dates are valid ISO strings
-                const start = new Date(llmCommand.event.start);
-                const end = new Date(llmCommand.event.end);
+                let start = new Date(llmCommand.event.start);
+                let end = new Date(llmCommand.event.end);
                 
-                if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-                    console.error('Invalid dates from LLM (createEvent):', {
-                        start: llmCommand.event.start,
-                        end: llmCommand.event.end,
-                        startParsed: start.toString(),
-                        endParsed: end.toString(),
-                        fullCommand: llmCommand
-                    });
-                    return null;
+                // If dates are invalid, use defaults
+                if (isNaN(start.getTime())) {
+                    console.warn('Invalid start date, using default:', llmCommand.event.start);
+                    start = new Date();
+                    start.setHours(9, 0, 0, 0);
                 }
                 
-                // Validate title exists
-                if (!llmCommand.event.title || llmCommand.event.title.trim() === '') {
-                    console.error('Missing title from LLM:', llmCommand);
-                    return null;
+                if (isNaN(end.getTime())) {
+                    console.warn('Invalid end date, using default:', llmCommand.event.end);
+                    end = new Date(start);
+                    end.setHours(start.getHours() + 1);
+                }
+                
+                // Ensure end is after start
+                if (end.getTime() <= start.getTime()) {
+                    end = new Date(start);
+                    end.setHours(start.getHours() + 1);
+                }
+                
+                // Validate title exists, use transcript if missing
+                let title = llmCommand.event.title;
+                if (!title || title.trim() === '') {
+                    console.warn('Missing title, extracting from transcript');
+                    // Extract a simple title from transcript
+                    title = transcript.split(' ').slice(0, 5).join(' ').trim() || 'New Event';
+                    // Capitalize first letter of each word
+                    title = title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
                 }
 
                 return {
                     type: 'createEvent',
                     event: {
-                        title: llmCommand.event.title,
+                        title: title,
                         start: start.toISOString(),
                         end: end.toISOString(),
                         description: llmCommand.event.description || '',
@@ -366,15 +503,33 @@ Return ONLY valid JSON, no other text.`;
                 
                 if (!originalEvent) {
                     console.error('Event not found for edit:', llmCommand.eventId);
-                    return null;
+                    // Convert to createEvent instead of failing
+                    const today = new Date();
+                    today.setHours(9, 0, 0, 0);
+                    const endTime = new Date(today);
+                    endTime.setHours(today.getHours() + 1);
+                    let title = transcript.split(' ').slice(0, 5).join(' ').trim() || 'New Event';
+                    title = title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+                    return {
+                        type: 'createEvent',
+                        event: {
+                            title: title,
+                            start: today.toISOString(),
+                            end: endTime.toISOString(),
+                            description: '',
+                            calendar: 'calendar',
+                            color: '#4285F4'
+                        }
+                    };
                 }
 
                 const start = new Date(llmCommand.event.start);
                 const end = new Date(llmCommand.event.end);
                 
                 if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-                    console.error('Invalid dates from LLM:', llmCommand.event.start, llmCommand.event.end);
-                    return null;
+                    console.error('Invalid dates from LLM, using original event dates:', llmCommand.event.start, llmCommand.event.end);
+                    const start = new Date(originalEvent.start);
+                    const end = new Date(originalEvent.end);
                 }
 
                 // Merge LLM changes with original event (LLM should already handle this, but ensure all fields present)
@@ -416,8 +571,29 @@ Return ONLY valid JSON, no other text.`;
                 return { type: 'goToToday' };
             }
 
-            console.warn('LLM returned unrecognized command type:', llmCommand.type);
-            return null;
+            // If we get here, the command type is unrecognized
+            // Default to createEvent as fallback
+            console.warn('LLM returned unrecognized command type:', llmCommand.type, '- defaulting to createEvent');
+            const today = new Date();
+            today.setHours(9, 0, 0, 0);
+            const endTime = new Date(today);
+            endTime.setHours(today.getHours() + 1);
+            
+            // Try to extract title from transcript or use default
+            let title = transcript.split(' ').slice(0, 5).join(' ').trim() || 'New Event';
+            title = title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+            
+            return {
+                type: 'createEvent',
+                event: {
+                    title: title,
+                    start: today.toISOString(),
+                    end: endTime.toISOString(),
+                    description: '',
+                    calendar: 'calendar',
+                    color: '#4285F4'
+                }
+            };
         } catch (error) {
             console.error('Error calling OpenAI API:', error);
             console.error('Error details:', {
@@ -425,7 +601,24 @@ Return ONLY valid JSON, no other text.`;
                 stack: error.stack,
                 transcript: transcript.substring(0, 100) // First 100 chars for debugging
             });
-            return null;
+            // Always return a default event instead of null
+            const today = new Date();
+            today.setHours(9, 0, 0, 0);
+            const endTime = new Date(today);
+            endTime.setHours(today.getHours() + 1);
+            let title = transcript.split(' ').slice(0, 5).join(' ').trim() || 'New Event';
+            title = title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+            return {
+                type: 'createEvent',
+                event: {
+                    title: title,
+                    start: today.toISOString(),
+                    end: endTime.toISOString(),
+                    description: '',
+                    calendar: 'calendar',
+                    color: '#4285F4'
+                }
+            };
         }
     };
 
@@ -462,6 +655,21 @@ Return ONLY valid JSON, no other text.`;
         const deleteKeywords = ['delete', 'remove', 'cancel', 'erase', 'clear', 'drop', 'get rid of'];
         const navigateKeywords = ['go to', 'navigate', 'show', 'move to date', 'next', 'previous', 'last', 'jump'];
         const viewKeywords = ['switch to', 'change to', 'show', 'view', 'display'];
+
+        // Bulk delete (clear calendar) intent — handle BEFORE per-event delete parsing
+        const bulkDeletePatterns = [
+            /\bdelete\s+all\s+(?:events|appointments|meetings)\b/i,
+            /\bdelete\s+every\s+(?:single\s+)?(?:event|appointment|meeting)\b/i,
+            /\bdelete\s+everything\b/i,
+            /\bclear\s+(?:my\s+)?(?:entire\s+)?calendar\b/i,
+            /\bclear\s+all\s+(?:events|appointments|meetings)\b/i,
+            /\bremove\s+all\s+(?:events|appointments|meetings)\b/i,
+            /\bwipe\s+(?:my\s+)?calendar\b/i
+        ];
+        const isBulkDelete = bulkDeletePatterns.some((p) => p.test(lowerText));
+        if (isBulkDelete) {
+            return { type: 'deleteAllEvents' };
+        }
         
         // Calculate intent confidence scores
         const getIntentScore = (keywords, text) => {
@@ -507,7 +715,10 @@ Return ONLY valid JSON, no other text.`;
         const goToForNavigation = /go to\s+(?:next|previous|last|this|today|tomorrow|yesterday|month|week|day|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.test(lowerText);
         const goToForEvent = /go to\s+(?:the\s+)?[a-z]+\s+[a-z]+/i.test(lowerText) && !goToForNavigation;
         
-        const hasCreateIntent = createScore > 0 || goToForEvent || (dateEntities.length > 0 && timeEntities.length > 0);
+        // More lenient create intent detection - check for "event" keyword or date/time combinations
+        const hasEventKeyword = /\b(event|meeting|appointment|task)\b/i.test(lowerText);
+        const hasCreateIntent = createScore > 0 || goToForEvent || (dateEntities.length > 0 && timeEntities.length > 0) || 
+                                (hasEventKeyword && (dateEntities.length > 0 || timeEntities.length > 0 || lowerText.includes('tomorrow') || lowerText.includes('today')));
         const hasEditIntent = editScore > 0;
         const hasDeleteIntent = deleteScore > 0;
         const hasNavigateIntent = navigateScore > 0 && !hasEditIntent && !goToForEvent && (goToForNavigation || !lowerText.match(/go to\s+(?:the\s+)?[a-z]+/i)); // Only navigate if not "go to [place]"
@@ -532,7 +743,10 @@ Return ONLY valid JSON, no other text.`;
         
         // Create event commands
         if (hasCreateIntent || (dateEntities.length > 0 && timeEntities.length > 0 && !hasDeleteIntent && !hasEditIntent)) {
-            return parseCreateEventWithEntities(lowerText, dateEntities, timeEntities, originalTranscript);
+            const createCommand = parseCreateEventWithEntities(lowerText, dateEntities, timeEntities, originalTranscript);
+            if (createCommand) {
+                return createCommand;
+            }
         }
         
         // Navigation commands
@@ -545,7 +759,52 @@ Return ONLY valid JSON, no other text.`;
         
         // If we have date/time entities but no clear intent, assume create
         if (dateEntities.length > 0 || timeEntities.length > 0) {
-            return parseCreateEventWithEntities(lowerText, dateEntities, timeEntities, originalTranscript);
+            const createCommand = parseCreateEventWithEntities(lowerText, dateEntities, timeEntities, originalTranscript);
+            if (createCommand) {
+                return createCommand;
+            }
+        }
+        
+        // AGGRESSIVE FALLBACK: If text contains "event" and date/time keywords, force create
+        const hasEventText = hasEventKeyword || /\b(event|meeting|appointment|task)\b/i.test(lowerText);
+        const hasDateOrTime = lowerText.includes('tomorrow') || lowerText.includes('today') || 
+                             lowerText.match(/\d{1,2}(?::\d{2})?\s*(am|pm)/i) ||
+                             lowerText.match(/\d{1,2}(?::\d{2})?\s*(am|pm)\s+to\s+\d{1,2}(?::\d{2})?\s*(am|pm)/i);
+        
+        if (hasEventText && hasDateOrTime && !hasDeleteIntent && !hasEditIntent) {
+            console.log('AGGRESSIVE FALLBACK in parseVoiceCommandWithEntities: Attempting to create event');
+            const createCommand = parseCreateEventWithEntities(lowerText, dateEntities, timeEntities, originalTranscript);
+            if (createCommand) {
+                return createCommand;
+            }
+            // If still null, return a basic event structure
+            console.log('parseCreateEventWithEntities returned null, creating basic event');
+            const today = new Date();
+            if (lowerText.includes('tomorrow')) {
+                today.setDate(today.getDate() + 1);
+            }
+            today.setHours(9, 0, 0, 0);
+            const endDate = new Date(today);
+            endDate.setHours(10, 0, 0, 0);
+            
+            let title = 'New Event';
+            const titleMatch = originalTranscript.match(/(?:titled|named|name it|call it|title it)\s+(.+?)(?:\.|$)/i);
+            if (titleMatch && titleMatch[1]) {
+                title = titleMatch[1].trim().replace(/[.,;:!?]+$/, '');
+            }
+            title = title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+            
+            return {
+                type: 'createEvent',
+                event: {
+                    title: title || 'New Event',
+                    start: today.toISOString(),
+                    end: endDate.toISOString(),
+                    description: '',
+                    calendar: 'calendar',
+                    color: '#4285F4'
+                }
+            };
         }
 
         return null;
@@ -1413,10 +1672,38 @@ Return ONLY valid JSON, no other text.`;
         
         // First, try to extract the action phrase using NLP patterns
         // This handles natural speech like "I need to go pick up the kids at 3pm"
-        const actionPhrase = extractActionPhrase(originalTranscript || text);
+        // First, check for explicit title indicators: "titled", "named", "name it", "call it"
+        const titlePatterns = [
+            /(?:titled|named|name it|call it|title it|titled as)\s+(.+?)(?:\s+(?:at|on|from|to|for|tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}(?:\s*(?:am|pm|o'clock))|january|february|march|april|may|june|july|august|september|october|november|december)|$)/i,
+            /(?:titled|named|name it|call it|title it)\s+"(.+?)"/i,
+            /(?:titled|named|name it|call it|title it)\s+'(.+?)'/i
+        ];
         
-        // Extract title - use a smarter approach to find the event name
-        let title = actionPhrase || originalTranscript || text;
+        let title = null;
+        // Used later for a higher-quality fallback title; must be function-scoped (not block-scoped)
+        let actionPhrase = null;
+        const fullText = (originalTranscript || text).toLowerCase();
+        
+        // Check for explicit title patterns first
+        for (const pattern of titlePatterns) {
+            const match = (originalTranscript || text).match(pattern);
+            if (match && match[1]) {
+                title = match[1].trim();
+                // Remove trailing punctuation and common words
+                title = title.replace(/[.,;:!?]+$/, '').trim();
+                // Remove common trailing words that might be date/time references
+                title = title.replace(/\s+(?:at|on|from|to|for|tomorrow|today)$/i, '').trim();
+                if (title.length > 0) {
+                    break;
+                }
+            }
+        }
+        
+        // If no explicit title found, use the action phrase extraction
+        if (!title) {
+            actionPhrase = extractActionPhrase(originalTranscript || text);
+            title = actionPhrase || originalTranscript || text;
+        }
         
         // Extract and remove time ranges FIRST before cleaning title
         // This includes patterns like "12:00 - 1:30 pm", "from 12:30 pm to 1:30 pm", "twelve to two thirty pm", etc.
@@ -1624,23 +1911,231 @@ Return ONLY valid JSON, no other text.`;
             title = 'New Event';
         }
         
-        // Parse date using entities first, then fallback to text parsing
+        // Parse date(s) using entities first, then fallback to text parsing
         const today = new Date(currentDate);
         today.setHours(0, 0, 0, 0);
         let targetDate = new Date(today);
         targetDate.setHours(9, 0, 0, 0);
+
+        // If user mentions multiple dates / days-of-week, we create multiple events.
+        // `targetDates` holds date-only (time applied later).
+        let targetDates = [];
+        let recurrenceSummary = null;
+        let recurrenceHandled = false;
+
+        const uniqDateKey = (d) => {
+            const dd = new Date(d);
+            dd.setHours(0, 0, 0, 0);
+            return dd.toISOString().slice(0, 10);
+        };
+
+        const parseWeekdaysFromText = (t) => {
+            const s = (t || '').toLowerCase();
+            const map = [
+                { idx: 0, patterns: ['sunday', 'sundays', 'sun'] },
+                { idx: 1, patterns: ['monday', 'mondays', 'mon'] },
+                { idx: 2, patterns: ['tuesday', 'tuesdays', 'tue', 'tues'] },
+                { idx: 3, patterns: ['wednesday', 'wednesdays', 'wed'] },
+                { idx: 4, patterns: ['thursday', 'thursdays', 'thu', 'thur', 'thurs'] },
+                { idx: 5, patterns: ['friday', 'fridays', 'fri'] },
+                { idx: 6, patterns: ['saturday', 'saturdays', 'sat'] },
+            ];
+
+            const found = new Set();
+            map.forEach(({ idx, patterns }) => {
+                for (const p of patterns) {
+                    if (new RegExp(`\\b${p}\\b`, 'i').test(s)) {
+                        found.add(idx);
+                        break;
+                    }
+                }
+            });
+            return Array.from(found);
+        };
+
+        const weekdaysText = (weekdayIdxs) => {
+            const namesPlural = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+            const names = (weekdayIdxs || []).map(i => namesPlural[i]).filter(Boolean);
+            if (names.length === 0) return '';
+            if (names.length === 1) return names[0];
+            if (names.length === 2) return `${names[0]} and ${names[1]}`;
+            return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+        };
+
+        const nextOccurrenceOfDow = (referenceDate, dow) => {
+            const ref = new Date(referenceDate);
+            ref.setHours(0, 0, 0, 0);
+            const currentDow = ref.getDay();
+            let daysToAdd = dow - currentDow;
+            if (daysToAdd < 0) daysToAdd += 7;
+            const d = new Date(ref);
+            d.setDate(d.getDate() + daysToAdd);
+            return d;
+        };
+
+        const isRestOfYearRequest = (t) => {
+            const s = (t || '').toLowerCase();
+            return (
+                s.includes('rest of the year') ||
+                s.includes('remainder of the year') ||
+                s.includes('until the end of the year') ||
+                s.includes('through the end of the year') ||
+                s.includes('for the rest of the year') ||
+                s.includes('for remainder of the year')
+            );
+        };
+
+        const endOfYear = (refDate) => {
+            const d = new Date(refDate);
+            return new Date(d.getFullYear(), 11, 31, 0, 0, 0, 0);
+        };
+
+        const dateToUntilStr = (d) => {
+            const dd = new Date(d);
+            return dd.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+        };
+
+        const extractMonthDayDatesWithPositions = (t, referenceYear) => {
+            const s = (t || '').toLowerCase();
+            const monthNamesFull = [
+                'january', 'february', 'march', 'april', 'may', 'june',
+                'july', 'august', 'september', 'october', 'november', 'december'
+            ];
+            const monthNamesShort = [
+                'jan', 'feb', 'mar', 'apr', 'may', 'jun',
+                'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
+            ];
+
+            const found = [];
+            for (let i = 0; i < monthNamesFull.length; i++) {
+                const full = monthNamesFull[i];
+                const short = monthNamesShort[i];
+                const monthRe = new RegExp(`\\b(${full}|${short})\\b\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?`, 'gi');
+                let m;
+                while ((m = monthRe.exec(s)) !== null) {
+                    const dayNum = parseInt(m[2], 10);
+                    const yearNum = m[3] ? parseInt(m[3], 10) : referenceYear;
+                    if (dayNum >= 1 && dayNum <= 31 && yearNum >= 1900) {
+                        const d = new Date(yearNum, i, dayNum, 0, 0, 0, 0);
+                        if (!isNaN(d.getTime())) {
+                            found.push({ date: d, index: m.index });
+                        }
+                    }
+                }
+            }
+            return found.sort((a, b) => a.index - b.index);
+        };
+
+        const looksLikeRangeRequest = (t) => {
+            const s = (t || '').toLowerCase();
+            return /\b(starting(?:\s+on)?|beginning(?:\s+on)?|from)\b/.test(s) || /\b(ending(?:\s+on)?|until|through|thru)\b/.test(s);
+        };
+
+        // --- Recurrence detection (must run BEFORE single-date parsing) ---
+        // Handles: "Starting on Jan 14 ... every Wed/Thu/Fri ... ending on Feb 16"
+        // Handles: "For the rest of the year ... every Mon/Tue/Thu ..."
+        const fullTextForDates = (originalTranscript || text || '').toLowerCase();
+        const weekdayIdxsFromText = parseWeekdaysFromText(fullTextForDates);
+
+        if (weekdayIdxsFromText.length > 0) {
+            // Date-range recurrence
+            if (looksLikeRangeRequest(fullTextForDates)) {
+                const foundDates = extractMonthDayDatesWithPositions(fullTextForDates, today.getFullYear());
+                const startKwIdx = fullTextForDates.search(/\b(starting(?:\s+on)?|beginning(?:\s+on)?|from)\b/);
+                const endKwIdx = fullTextForDates.search(/\b(ending(?:\s+on)?|until|through|thru)\b/);
+
+                const pickAfter = (idx) => {
+                    if (idx < 0) return null;
+                    const hit = foundDates.find(d => d.index > idx);
+                    return hit ? hit.date : null;
+                };
+
+                let rangeStart = pickAfter(startKwIdx);
+                let rangeEnd = pickAfter(endKwIdx);
+
+                // Fallbacks if keyword adjacency fails
+                if (!rangeStart && foundDates.length > 0) rangeStart = foundDates[0].date;
+                if (!rangeEnd && foundDates.length > 1) rangeEnd = foundDates[foundDates.length - 1].date;
+
+                if (rangeStart && rangeEnd) {
+                    // If end date appears before start date, assume end is next year
+                    if (rangeEnd.getTime() < rangeStart.getTime()) {
+                        const bumped = new Date(rangeEnd);
+                        bumped.setFullYear(bumped.getFullYear() + 1);
+                        rangeEnd = bumped;
+                    }
+
+                    const weekdaySet = new Set(weekdayIdxsFromText);
+                    const dateMap = new Map();
+                    const cursor = new Date(rangeStart);
+                    cursor.setHours(0, 0, 0, 0);
+                    const endCursor = new Date(rangeEnd);
+                    endCursor.setHours(0, 0, 0, 0);
+
+                    while (cursor.getTime() <= endCursor.getTime()) {
+                        if (weekdaySet.has(cursor.getDay())) {
+                            dateMap.set(uniqDateKey(cursor), new Date(cursor));
+                        }
+                        cursor.setDate(cursor.getDate() + 1);
+                    }
+
+                    targetDates = Array.from(dateMap.values()).sort((a, b) => a.getTime() - b.getTime());
+                    targetDate = new Date(targetDates[0] || rangeStart);
+                    recurrenceSummary = {
+                        weekdays: weekdaysText(weekdayIdxsFromText),
+                        from: dateToUntilStr(rangeStart),
+                        until: dateToUntilStr(rangeEnd),
+                    };
+                    recurrenceHandled = true;
+                }
+            }
+
+            // Rest-of-year recurrence (only if we didn't already handle a date range)
+            if (!recurrenceHandled && isRestOfYearRequest(fullTextForDates)) {
+                const rangeStart = new Date(today);
+                const rangeEnd = endOfYear(today);
+
+                const weekdaySet = new Set(weekdayIdxsFromText);
+                const dateMap = new Map();
+                const cursor = new Date(rangeStart);
+                while (cursor.getTime() <= rangeEnd.getTime()) {
+                    if (weekdaySet.has(cursor.getDay())) {
+                        dateMap.set(uniqDateKey(cursor), new Date(cursor));
+                    }
+                    cursor.setDate(cursor.getDate() + 1);
+                }
+
+                targetDates = Array.from(dateMap.values()).sort((a, b) => a.getTime() - b.getTime());
+                targetDate = new Date(targetDates[0] || today);
+                recurrenceSummary = {
+                    weekdays: weekdaysText(weekdayIdxsFromText),
+                    from: dateToUntilStr(rangeStart),
+                    until: dateToUntilStr(rangeEnd),
+                };
+                recurrenceHandled = true;
+            }
+        }
         
         // Use date entity if available
-        if (dateEntities.length > 0) {
-            const parsedDate = parseDateFromEntity(dateEntities[0], currentDate);
-            if (parsedDate) {
-                targetDate = new Date(parsedDate);
-                // Only set default time if not an all-day event
+        if (!recurrenceHandled && dateEntities.length > 0) {
+            // If multiple date entities, create events for each unique date
+            const dateMap = new Map();
+            dateEntities.forEach((ent) => {
+                const parsedDate = parseDateFromEntity(ent, currentDate);
+                if (parsedDate && !isNaN(parsedDate.getTime())) {
+                    dateMap.set(uniqDateKey(parsedDate), new Date(parsedDate));
+                }
+            });
+            const parsedDates = Array.from(dateMap.values());
+
+            if (parsedDates.length > 0) {
+                targetDates = parsedDates;
+                targetDate = new Date(parsedDates[0]);
                 if (!isAllDay) {
                     targetDate.setHours(9, 0, 0, 0);
                 }
             }
-        } else {
+        } else if (!recurrenceHandled) {
             // Fallback to text parsing - use original transcript for better parsing
             const textToParse = (originalTranscript || text).toLowerCase();
             
@@ -1702,24 +2197,40 @@ Return ONLY valid JSON, no other text.`;
             // Only use day names if no specific month/day date was found
             // Use the next occurrence: if day is today or in the future this week, use this week; otherwise use next week
             if (!monthDateFound) {
-                const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                for (let i = 0; i < dayNames.length; i++) {
-                    if (textToParse.includes(dayNames[i])) {
-                        const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-                        const targetDay = i; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-                        let daysToAdd = targetDay - currentDay;
-                        // If the target day is today (daysToAdd === 0), use today
-                        // If the target day is in the future this week (daysToAdd > 0), use daysToAdd as is
-                        // If the target day has already passed this week (daysToAdd < 0), add 7 days for next week
-                        if (daysToAdd < 0) {
-                            daysToAdd += 7; // Next week
+                const weekdayIdxs = parseWeekdaysFromText(textToParse);
+                if (weekdayIdxs.length > 0) {
+                    if (targetDates.length === 0) {
+                        // Create one event for each mentioned weekday (next occurrence for each)
+                        const dateMap = new Map();
+                        weekdayIdxs.forEach((dow) => {
+                            const d = nextOccurrenceOfDow(today, dow);
+                            dateMap.set(uniqDateKey(d), d);
+                        });
+                        targetDates = Array.from(dateMap.values()).sort((a, b) => a.getTime() - b.getTime());
+                        targetDate = new Date(targetDates[0]);
+                    }
+                } else {
+                    // Backwards-compatible: single weekday mention
+                    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                    for (let i = 0; i < dayNames.length; i++) {
+                        if (textToParse.includes(dayNames[i])) {
+                            const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+                            const targetDay = i; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+                            let daysToAdd = targetDay - currentDay;
+                            if (daysToAdd < 0) {
+                                daysToAdd += 7; // Next week
+                            }
+                            targetDate = new Date(today);
+                            targetDate.setDate(targetDate.getDate() + daysToAdd);
+                            break;
                         }
-                        // If daysToAdd === 0, it stays 0 (same day)
-                        targetDate = new Date(today);
-                        targetDate.setDate(targetDate.getDate() + daysToAdd);
-                        break;
                     }
                 }
+            }
+
+            // If we didn't find multiple dates, use the computed single targetDate
+            if (targetDates.length === 0) {
+                targetDates = [new Date(targetDate)];
             }
         }
         
@@ -1963,18 +2474,61 @@ Return ONLY valid JSON, no other text.`;
         
         // Capitalize title before returning
         const capitalizedTitle = capitalizeTitle(title);
-        
-        return {
-            type: 'createEvent',
-            event: {
+
+        const dateList = (Array.isArray(targetDates) && targetDates.length > 0)
+            ? targetDates
+            : [new Date(targetDate)];
+
+        const uniqueByDay = new Map();
+        dateList.forEach((d) => {
+            const dd = new Date(d);
+            dd.setHours(0, 0, 0, 0);
+            uniqueByDay.set(dd.toISOString().slice(0, 10), dd);
+        });
+
+        const buildEventForDate = (day) => {
+            const start = new Date(day);
+
+            if (isAllDay) {
+                start.setHours(0, 0, 0, 0);
+            } else if (startTimeParsed && startTime) {
+                start.setHours(startTime.hours, startTime.minutes || 0, 0, 0);
+            } else {
+                start.setHours(9, 0, 0, 0);
+            }
+
+            const end = new Date(start);
+            if (isAllDay) {
+                end.setHours(23, 59, 59, 999);
+            } else if (endTimeParsed && endTime) {
+                end.setHours(endTime.hours, endTime.minutes || 0, 0, 0);
+                if (end.getTime() < start.getTime()) {
+                    end.setDate(end.getDate() + 1);
+                }
+            } else {
+                end.setHours(start.getHours() + 1, start.getMinutes(), 0, 0);
+            }
+
+            return {
                 title: capitalizedTitle,
-                start: targetDate.toISOString(),
-                end: endDate.toISOString(),
+                start: start.toISOString(),
+                end: end.toISOString(),
                 description: '',
                 calendar: 'calendar',
                 color: '#4285F4'
-            }
+            };
         };
+
+        const eventsToCreate = Array.from(uniqueByDay.values())
+            .sort((a, b) => a.getTime() - b.getTime())
+            .map(buildEventForDate);
+
+        if (eventsToCreate.length > 1) {
+            if (recurrenceSummary) return { type: 'createEvents', events: eventsToCreate, summary: recurrenceSummary };
+            return { type: 'createEvents', events: eventsToCreate };
+        }
+
+        return { type: 'createEvent', event: eventsToCreate[0] };
     };
 
     const parseCreateEvent = (text) => {
@@ -2408,6 +2962,30 @@ Return ONLY valid JSON, no other text.`;
                         speak("Sorry, I was unable to hear the event");
                     }
                     break;
+                case 'createEvents':
+                    if (Array.isArray(command.events) && command.events.length > 0 && onAddEvent) {
+                        command.events.forEach((evt, idx) => {
+                            const eventData = {
+                                ...evt,
+                                id: `${Date.now()}-${idx}`
+                            };
+                            onAddEvent(eventData);
+                        });
+
+                        const title = command.events[0]?.title || 'event';
+                        if (command.summary?.weekdays && command.summary?.until) {
+                            if (command.summary?.from) {
+                                speak(`Successfully created ${command.events.length} events for ${title} on ${command.summary.weekdays} from ${command.summary.from} until ${command.summary.until}`);
+                            } else {
+                                speak(`Successfully created ${command.events.length} events for ${title} on ${command.summary.weekdays} until ${command.summary.until}`);
+                            }
+                        } else {
+                            speak(`Successfully created ${command.events.length} events for ${title}`);
+                        }
+                    } else {
+                        speak("Sorry, I was unable to hear the event");
+                    }
+                    break;
                 case 'editEvent':
                     if (command.eventId && command.event && onUpdateEvent) {
                         onUpdateEvent(command.eventId, command.event);
@@ -2430,6 +3008,23 @@ Return ONLY valid JSON, no other text.`;
                     } else {
                         speak("Sorry, I was unable to hear the event");
                     }
+                    break;
+                case 'deleteAllEvents':
+                    if (!onDeleteEvent) {
+                        speak("Sorry, I can't delete events right now.");
+                        break;
+                    }
+                    if (!Array.isArray(events) || events.length === 0) {
+                        speak("Your calendar is already empty.");
+                        break;
+                    }
+                    // Delete everything we currently know about
+                    events.forEach((e) => {
+                        if (e?.id !== undefined && e?.id !== null) {
+                            onDeleteEvent(e.id);
+                        }
+                    });
+                    speak(`Successfully deleted ${events.length} events.`);
                     break;
                 case 'navigate':
                     if (onNavigateDate) {
@@ -2496,10 +3091,19 @@ Return ONLY valid JSON, no other text.`;
                 setIsRecording(false); // Always reset recording state when stopped
                 isRecordingRef.current = false;
                 
-                if (audioChunksRef.current.length > 0) {
+                const totalBytes = audioChunksRef.current.reduce((sum, chunk) => sum + (chunk?.size || 0), 0);
+                if (audioChunksRef.current.length > 0 && totalBytes > 0) {
                     setIsProcessing(true);
                     try {
-                        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                        // Preserve actual recorded mime type (Safari commonly records audio/mp4)
+                        const inferredType =
+                            audioChunksRef.current[0]?.type ||
+                            mediaRecorderRef.current?.mimeType ||
+                            mimeType ||
+                            'application/octet-stream';
+
+                        const audioBlob = new Blob(audioChunksRef.current, { type: inferredType });
+                        console.log('Recorded audio blob:', { type: audioBlob.type, size: audioBlob.size });
                         await transcribeAudio(audioBlob);
                     } catch (error) {
                         console.error('Error in transcription:', error);
@@ -2507,6 +3111,9 @@ Return ONLY valid JSON, no other text.`;
                     } finally {
                         setIsProcessing(false);
                     }
+                } else {
+                    addChatMessage("I didn't catch any audio. Hold spacebar a bit longer and try again.", false, false);
+                    speak("I didn't catch any audio. Hold spacebar a bit longer and try again.", false);
                 }
             };
             
@@ -2528,11 +3135,16 @@ Return ONLY valid JSON, no other text.`;
     
     const transcribeAudio = async (audioBlob) => {
         try {
-            // Determine content type based on blob type
-            let contentType = 'audio/webm';
-            if (audioBlob.type) {
-                contentType = audioBlob.type;
+            if (!DEEPGRAM_API_KEY) {
+                throw new Error('Deepgram API key is missing (VITE_DEEPGRAM_API_KEY).');
             }
+
+            if (!audioBlob || audioBlob.size < 800) {
+                throw new Error(`No usable audio captured (size=${audioBlob?.size || 0} bytes).`);
+            }
+
+            // Determine content type based on blob type
+            let contentType = audioBlob.type || 'application/octet-stream';
             
             // Use Deepgram's audio intelligence features with enhanced reasoning:
             // - smart_format: better formatting
@@ -2560,7 +3172,8 @@ Return ONLY valid JSON, no other text.`;
                 method: 'POST',
                 headers: {
                     'Authorization': `Token ${DEEPGRAM_API_KEY}`,
-                    'Content-Type': contentType
+                    'Content-Type': contentType,
+                    'Accept': 'application/json'
                 },
                 body: audioBlob
             });
@@ -2568,7 +3181,7 @@ Return ONLY valid JSON, no other text.`;
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('Deepgram API error:', response.status, errorText);
-                throw new Error(`Deepgram API error: ${response.status} ${response.statusText}`);
+                throw new Error(`Deepgram STT error ${response.status} ${response.statusText}: ${errorText}`);
             }
             
             const data = await response.json();
@@ -2602,45 +3215,184 @@ Return ONLY valid JSON, no other text.`;
                 // Add voice input to chat
                 addChatMessage(textToParse, true, true);
                 
-                // Step 2: ChatGPT reasons about what Deepgram heard and creates events
-                // ChatGPT is the PRIMARY reasoning engine - Deepgram is ONLY for listening
-                console.log('Sending to ChatGPT for reasoning:', {
+                // Step 2: Deepgram reasons about what it heard using entity detection
+                // Deepgram is the PRIMARY reasoning engine - uses entity detection and parsing
+                console.log('Using Deepgram for reasoning:', {
                     text: textToParse,
                     textLength: textToParse.length,
-                    entitiesCount: entities.length
-                });
-                
-                const llmCommand = await parseCommandWithLLM(textToParse, entities);
-                
-                if (llmCommand) {
-                    console.log('ChatGPT reasoned successfully:', llmCommand);
-                    executeCommand(llmCommand);
-                    return;
-                }
-                
-                // If ChatGPT fails to reason/parse, provide failure message
-                console.error('ChatGPT reasoning failed - no command returned');
-                console.error('Debug info:', {
-                    transcript: transcript.substring(0, 200),
-                    paragraphs: paragraphs.substring(0, 200),
-                    textToParse: textToParse.substring(0, 200),
+                    entitiesCount: entities.length,
                     entities: entities
                 });
-                speak("Sorry, I was unable to hear the event");
+                
+                let command = parseVoiceCommandWithEntities(textToParse, entities, transcript);
+                
+                // AGGRESSIVE FALLBACK: If parsing failed, try to extract event info directly
+                if (!command) {
+                    console.log('Primary parsing failed, attempting aggressive fallback');
+                    const lowerText = textToParse.toLowerCase();
+                    
+                    // Check for ANY event-related keywords
+                    const hasEventKeywords = /\b(event|meeting|appointment|task|create|add|schedule|make|an event|a meeting)\b/i.test(textToParse);
+                    
+                    // Check for ANY date/time patterns
+                    const hasDate = lowerText.includes('tomorrow') || lowerText.includes('today') || lowerText.includes('monday') || 
+                                   lowerText.includes('tuesday') || lowerText.includes('wednesday') || lowerText.includes('thursday') ||
+                                   lowerText.includes('friday') || lowerText.includes('saturday') || lowerText.includes('sunday');
+                    const hasTime = /\d{1,2}(?::\d{2})?\s*(am|pm)/i.test(textToParse) || 
+                                   /\d{1,2}(?::\d{2})?\s*(am|pm)\s+to\s+\d{1,2}(?::\d{2})?\s*(am|pm)/i.test(textToParse) ||
+                                   /at\s+\d{1,2}(?::\d{2})?\s*(am|pm)/i.test(textToParse) ||
+                                   /from\s+\d{1,2}(?::\d{2})?\s*(am|pm)/i.test(textToParse);
+                    
+                    console.log('Fallback check:', { hasEventKeywords, hasDate, hasTime, text: textToParse });
+                    
+                    // ULTRA AGGRESSIVE: If we have event keywords OR (date AND time) OR just time with "at" or "from", force create event
+                    if (hasEventKeywords || (hasDate && hasTime) || (hasTime && (lowerText.includes('at') || lowerText.includes('from')))) {
+                        console.log('AGGRESSIVE FALLBACK: Forcing event creation');
+                        
+                        const today = new Date();
+                        const isTomorrow = lowerText.includes('tomorrow');
+                        if (isTomorrow) {
+                            today.setDate(today.getDate() + 1);
+                        }
+                        
+                        // Extract time range - try multiple patterns
+                        let timeRangeMatch = null;
+                        const timePatterns = [
+                            /(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s+to\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i,
+                            /from\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s+to\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i,
+                            /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s+to\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i,
+                            /at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i
+                        ];
+                        
+                        for (const pattern of timePatterns) {
+                            timeRangeMatch = textToParse.match(pattern);
+                            if (timeRangeMatch) break;
+                        }
+                        
+                        let startHour = 9, startMin = 0, endHour = 10, endMin = 0;
+                        
+                        if (timeRangeMatch) {
+                            startHour = parseInt(timeRangeMatch[1]);
+                            startMin = timeRangeMatch[2] ? parseInt(timeRangeMatch[2]) : 0;
+                            const startPeriod = timeRangeMatch[3]?.toLowerCase();
+                            
+                            if (timeRangeMatch[4]) {
+                                // Has end time
+                                endHour = parseInt(timeRangeMatch[4]);
+                                endMin = timeRangeMatch[5] ? parseInt(timeRangeMatch[5]) : 0;
+                                const endPeriod = timeRangeMatch[6]?.toLowerCase();
+                                
+                                if (startPeriod === 'pm' && startHour !== 12) startHour += 12;
+                                if (startPeriod === 'am' && startHour === 12) startHour = 0;
+                                if (endPeriod === 'pm' && endHour !== 12) endHour += 12;
+                                if (endPeriod === 'am' && endHour === 12) endHour = 0;
+                            } else {
+                                // Single time, add 1 hour
+                                if (startPeriod === 'pm' && startHour !== 12) startHour += 12;
+                                if (startPeriod === 'am' && startHour === 12) startHour = 0;
+                                endHour = startHour + 1;
+                                if (endHour >= 24) endHour = 0;
+                            }
+                        }
+                        
+                        today.setHours(startHour, startMin, 0, 0);
+                        const endDate = new Date(today);
+                        endDate.setHours(endHour, endMin, 0, 0);
+                        
+                        // Extract title - prioritize "titled", "named", "name it"
+                        let title = 'New Event';
+                        const titlePatterns = [
+                            /(?:titled|named|name it|call it|title it)\s+(.+?)(?:\.|$)/i,
+                            /(?:titled|named|name it|call it|title it)\s+"(.+?)"/i,
+                            /(?:titled|named|name it|call it|title it)\s+'(.+?)'/i
+                        ];
+                        
+                        for (const pattern of titlePatterns) {
+                            const titleMatch = textToParse.match(pattern);
+                            if (titleMatch && titleMatch[1]) {
+                                title = titleMatch[1].trim().replace(/[.,;:!?]+$/, '');
+                                break;
+                            }
+                        }
+                        
+                        // If no explicit title, try to extract from text
+                        if (title === 'New Event') {
+                            // Remove instruction words and date/time
+                            let cleanTitle = textToParse
+                                .replace(/\b(create|add|schedule|make|an event|a meeting|appointment|task)\b/gi, '')
+                                .replace(/\b(tomorrow|today|at|from|to)\b/gi, '')
+                                .replace(/\d{1,2}(?::\d{2})?\s*(am|pm)/gi, '')
+                                .replace(/\s+/g, ' ')
+                                .trim();
+                            
+                            if (cleanTitle.length > 2 && cleanTitle.length < 50) {
+                                title = cleanTitle;
+                            }
+                        }
+                        
+                        title = title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+                        
+                        console.log('AGGRESSIVE FALLBACK: Creating event', { title, start: today.toISOString(), end: endDate.toISOString() });
+                        
+                        command = {
+                            type: 'createEvent',
+                            event: {
+                                title: title || 'New Event',
+                                start: today.toISOString(),
+                                end: endDate.toISOString(),
+                                description: '',
+                                calendar: 'calendar',
+                                color: '#4285F4'
+                            }
+                        };
+                    }
+                }
+                
+                if (command) {
+                    console.log('Deepgram reasoned successfully:', command);
+                    executeCommand(command);
+                } else {
+                    // Provide helpful feedback based on what was detected
+                    const dateEntitiesFiltered = entities.filter(e => e.type === 'DATE' || e.label === 'DATE');
+                    const timeEntitiesFiltered = entities.filter(e => e.type === 'TIME' || e.label === 'TIME');
+                    const detectedDate = dateEntitiesFiltered.length > 0 ? (dateEntitiesFiltered[0].value || dateEntitiesFiltered[0].text || dateEntitiesFiltered[0].word || 'none') : 'none';
+                    const detectedTime = timeEntitiesFiltered.length > 0 ? (timeEntitiesFiltered[0].value || timeEntitiesFiltered[0].text || timeEntitiesFiltered[0].word || 'none') : 'none';
+                    
+                    let message = `I'm not quite sure what you meant. `;
+                    if (detectedDate !== 'none' && detectedDate !== 'today') {
+                        message += `I heard a date: ${detectedDate}. `;
+                    }
+                    if (detectedTime !== 'none') {
+                        message += `I heard a time: ${detectedTime}. `;
+                    }
+                    message += `Try something like, "Create a meeting tomorrow at 2pm" or "Add lunch with John on Monday at noon".`;
+                    
+                    speak(message);
+                }
             } else {
                 speak("Sorry, I was unable to hear the event");
             }
         } catch (error) {
             console.error('Transcription error:', error);
-            let errorMessage = "I'm having trouble understanding you right now. ";
-            if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-                errorMessage += 'There seems to be an authentication issue.';
-            } else if (error.message.includes('network') || error.message.includes('fetch')) {
-                errorMessage += 'Check your internet connection and try again.';
+            const raw = (error?.message || '').toString();
+
+            // Surface the real failure in the chat so we can diagnose quickly.
+            addChatMessage(`Transcription failed: ${raw}`, false, false);
+
+            let spoken = "I'm having trouble understanding you right now. ";
+            if (raw.includes('401') || raw.toLowerCase().includes('unauthorized')) {
+                spoken += 'Deepgram authentication failed.';
+            } else if (raw.toLowerCase().includes('network') || raw.toLowerCase().includes('fetch')) {
+                spoken += 'Please check your internet connection.';
+            } else if (raw.toLowerCase().includes('no usable audio')) {
+                spoken += 'I did not capture any audio.';
+            } else if (raw.toLowerCase().includes('deepgram stt error')) {
+                spoken += "Deepgram couldn't process that audio format.";
             } else {
-                errorMessage += `Let's try that again.`;
+                spoken += "Let's try that again.";
             }
-            speak(errorMessage);
+
+            speak(spoken, false);
         } finally {
             setIsProcessing(false);
         }
@@ -2768,17 +3520,17 @@ Return ONLY valid JSON, no other text.`;
         setChatInput('');
         addChatMessage(userMessage, true, false);
 
-        // Process the text message through ChatGPT
+        // Process the text message through Deepgram entity-based parsing
         try {
             setIsProcessing(true);
-            const entities = []; // No entities for text input
-            const llmCommand = await parseCommandWithLLM(userMessage, entities);
+            const entities = []; // No entities for text input (would need to send to Deepgram for entity detection)
+            const command = parseVoiceCommandWithEntities(userMessage, entities, userMessage);
             
-            if (llmCommand) {
-                executeCommand(llmCommand);
+            if (command) {
+                executeCommand(command);
                 // The executeCommand will trigger speak() which will add the response to chat
             } else {
-                addChatMessage("Sorry, I was unable to understand that command.", false, false);
+                addChatMessage("Sorry, I was unable to understand that command. Try something like 'Create a meeting tomorrow at 2pm' or 'Add lunch with John on Monday at noon'.", false, false);
             }
         } catch (error) {
             console.error('Error processing chat message:', error);
@@ -2804,28 +3556,28 @@ Return ONLY valid JSON, no other text.`;
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                         <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" fill="currentColor"/>
                     </svg>
-                </button>
-                <button 
-                    className={`day-structure-mic-btn ${isRecording ? 'recording' : ''} ${isProcessing ? 'processing' : ''}`}
-                    onClick={handleMicClick}
-                    disabled={isProcessing}
-                >
-                    {isRecording ? (
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                            <circle cx="12" cy="12" r="10" fill="red" opacity="0.8"/>
-                            <circle cx="12" cy="12" r="6" fill="white"/>
-                        </svg>
-                    ) : isProcessing ? (
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" strokeDasharray="31.416" strokeDashoffset="15.708">
-                                <animate attributeName="stroke-dashoffset" values="15.708;47.124;15.708" dur="1s" repeatCount="indefinite"/>
-                            </circle>
-                        </svg>
-                    ) : (
+            </button>
+            <button 
+                className={`day-structure-mic-btn ${isRecording ? 'recording' : ''} ${isProcessing ? 'processing' : ''}`}
+                onClick={handleMicClick}
+                disabled={isProcessing}
+            >
+                {isRecording ? (
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" fill="red" opacity="0.8"/>
+                        <circle cx="12" cy="12" r="6" fill="white"/>
+                    </svg>
+                ) : isProcessing ? (
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" strokeDasharray="31.416" strokeDashoffset="15.708">
+                            <animate attributeName="stroke-dashoffset" values="15.708;47.124;15.708" dur="1s" repeatCount="indefinite"/>
+                        </circle>
+                    </svg>
+                ) : (
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
                     <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="currentColor"/>
                 </svg>
-                    )}
+                )}
             </button>
                 <button 
                     className="day-structure-arrow-btn day-structure-arrow-right"
@@ -2912,16 +3664,16 @@ Return ONLY valid JSON, no other text.`;
                     className={`day-structure-dario-btn ${isChatOpen ? 'active' : ''}`} 
                     onClick={handleChatToggle}
                 >
-                    <div className="dario-icon-wrapper">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
-                        </svg>
-                    </div>
-                    <span className="dario-label">Dario</span>
+                <div className="dario-icon-wrapper">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+                    </svg>
+                </div>
+                <span className="dario-label">Dario</span>
                     {chatMessages.length > 0 && (
                         <span className="dario-chat-badge">{chatMessages.length}</span>
                     )}
-                </button>
+            </button>
             </div>
         </div>
     );
