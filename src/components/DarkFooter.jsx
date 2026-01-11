@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-const DEEPGRAM_API_KEY = 'f40edd99a67fed5d70fce148818e893ff29d5c6f';
+const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || 'f40edd99a67fed5d70fce148818e893ff29d5c6f';
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
 
 export default function DarkFooter({ 
     onCreateEvent, 
@@ -30,6 +31,363 @@ export default function DarkFooter({
         };
     }, []);
 
+    // LLM-powered command parsing using OpenAI
+    const parseCommandWithLLM = async (transcript, entities) => {
+        if (!OPENAI_API_KEY) {
+            console.warn('OpenAI API key not set. Falling back to entity-based parsing.');
+            return null;
+        }
+
+        const today = new Date();
+        const currentDateStr = today.toISOString().split('T')[0];
+        const currentTimeStr = today.toTimeString().split(' ')[0].substring(0, 5);
+
+        // Extract entity information for context
+        const entityInfo = entities.map(e => ({
+            type: e.type || e.label,
+            value: e.value || e.text || e.word
+        })).filter(e => e.type && e.value);
+
+        // Format events with full details for better LLM reasoning
+        const eventsDetails = events.map(e => {
+            const start = new Date(e.start);
+            const end = new Date(e.end);
+            return {
+                id: e.id,
+                title: e.title,
+                start: start.toISOString(),
+                startDate: start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+                startTime: start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+                end: end.toISOString(),
+                endDate: end.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+                endTime: end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+                description: e.description || '',
+                color: e.color || '#4285F4'
+            };
+        });
+
+        const prompt = `You are an intelligent calendar assistant that understands voice commands and can reason about calendar changes. Parse the following user command and return a JSON object with the appropriate command structure.
+
+Current date and time: ${currentDateStr} ${currentTimeStr}
+
+AVAILABLE EVENTS IN CALENDAR:
+${events.length > 0 ? JSON.stringify(eventsDetails, null, 2) : 'No events in calendar'}
+
+User command: "${transcript}"
+
+${entityInfo.length > 0 ? `Detected entities: ${JSON.stringify(entityInfo)}` : ''}
+
+Return a JSON object with ONE of these structures:
+
+1. CREATE EVENT:
+IMPORTANT: When user specifies a time interval like "8 pm to 10 pm", you MUST use those exact times:
+- "8 pm to 10 pm" on January 15th → start: "2024-01-15T20:00:00", end: "2024-01-15T22:00:00"
+- DO NOT use random or default times when a time interval is explicitly stated
+- ALWAYS parse time intervals correctly (8pm = 20:00, 10pm = 22:00)
+{
+  "type": "createEvent",
+  "event": {
+    "title": "Event title (capitalize first letter of each word, extract action phrase like 'pick up kids' not full sentence)",
+    "start": "ISO 8601 datetime string (REQUIRED - use exact time from user's time interval)",
+    "end": "ISO 8601 datetime string (REQUIRED - use exact time from user's time interval)",
+    "description": "optional description",
+    "calendar": "calendar",
+    "color": "#4285F4"
+  }
+}
+
+2. EDIT EVENT:
+IMPORTANT: When user specifies a time interval in an edit, you MUST use those exact times. Recognize ALL formats:
+- "change to 8 pm to 10 pm" → start: 20:00:00, end: 22:00:00
+- "change to 8pm-10pm" → start: 20:00:00, end: 22:00:00
+- "reschedule to 8pm until 10pm" → start: 20:00:00, end: 22:00:00
+- "move to between 2pm and 4pm" → start: 14:00:00, end: 16:00:00
+- "change to 8:30 pm to 10:30 pm" → start: 20:30:00, end: 22:30:00
+- "update to eight pm to ten pm" → start: 20:00:00, end: 22:00:00
+- "change to 9am-5pm" → start: 09:00:00, end: 17:00:00
+- Look for keywords: "to", "until", "through", "-", "and", "from...to", "between...and"
+For editing, you MUST match events intelligently:
+- Match by title similarity (fuzzy matching: "my meeting" matches "Team Meeting")
+- Match by date/time context if title is unclear
+- For TIME INTERVALS: Always use exact times from the interval (e.g., "change to 8pm to 10pm" = 20:00 to 22:00)
+- For partial edits (e.g., "move to tomorrow", "change time to 3pm"), preserve unchanged fields from original event
+- When user says "move", "reschedule", "change date/time", update ONLY the specified fields
+- For time changes: If user says "move to 3pm", keep the date but change time
+- For time interval changes: If user says "change to 8pm to 10pm", keep date, change start to 20:00, end to 22:00
+- For date changes: If user says "move to tomorrow", keep the time but change date
+- For relative changes: "move forward 2 hours" = add 2 hours to start and end
+- For relative changes: "move to next week" = keep day/time, move to next week
+{
+  "type": "editEvent",
+  "eventId": "event id from available events (REQUIRED - must match existing event)",
+  "event": {
+    "title": "title (preserve original if not mentioned, or update if specified)",
+    "start": "ISO 8601 datetime string (REQUIRED - use exact time from time interval if specified, otherwise use original)",
+    "end": "ISO 8601 datetime string (REQUIRED - use exact time from time interval if specified, otherwise preserve duration)",
+    "description": "description (preserve original if not mentioned)",
+    "calendar": "calendar",
+    "color": "#4285F4"
+  },
+  "eventTitle": "original event title"
+}
+
+3. DELETE EVENT:
+{
+  "type": "deleteEvent",
+  "eventId": "event id (match from available events)",
+  "eventTitle": "event title"
+}
+
+4. NAVIGATE:
+{
+  "type": "navigate",
+  "direction": 1 or -1
+}
+
+5. SWITCH VIEW:
+{
+  "type": "switchView",
+  "view": "month" or "week" or "day"
+}
+
+6. GO TO TODAY:
+{
+  "type": "goToToday"
+}
+
+IMPORTANT RULES:
+
+CREATING EVENTS:
+- For dates: Use specific dates (e.g., "January 17th") over day names when both are present. If only day name (e.g., "Wednesday"), use next occurrence if past today, or today if it's today.
+- For TIME INTERVALS (CRITICAL - ALWAYS RESPECT THESE):
+  Recognize time intervals in ALL these formats and patterns:
+  
+  STANDARD FORMATS:
+  * "8 pm to 10 pm" → start: 20:00:00, end: 22:00:00
+  * "8pm to 10pm" → start: 20:00:00, end: 22:00:00
+  * "8:00 pm to 10:00 pm" → start: 20:00:00, end: 22:00:00
+  * "8:30 pm to 10:30 pm" → start: 20:30:00, end: 22:30:00
+  * "12:30 pm to 1:30 pm" → start: 12:30:00, end: 13:30:00
+  * "9 am to 5 pm" → start: 09:00:00, end: 17:00:00
+  * "9:00 am to 5:00 pm" → start: 09:00:00, end: 17:00:00
+  * "2pm-4pm" → start: 14:00:00, end: 16:00:00
+  * "2pm to 4pm" → start: 14:00:00, end: 16:00:00
+  * "from 8 pm to 10 pm" → start: 20:00:00, end: 22:00:00
+  * "between 8 pm and 10 pm" → start: 20:00:00, end: 22:00:00
+  * "8pm until 10pm" → start: 20:00:00, end: 22:00:00
+  * "8pm through 10pm" → start: 20:00:00, end: 22:00:00
+  
+  WITH WORDS:
+  * "eight pm to ten pm" → start: 20:00:00, end: 22:00:00
+  * "eight pm until ten pm" → start: 20:00:00, end: 22:00:00
+  * "nine am to five pm" → start: 09:00:00, end: 17:00:00
+  * "twelve pm to one pm" → start: 12:00:00, end: 13:00:00
+  * "two thirty pm to four thirty pm" → start: 14:30:00, end: 16:30:00
+  * "eight o'clock pm to ten o'clock pm" → start: 20:00:00, end: 22:00:00
+  
+  WITH MINUTES:
+  * "8:15 pm to 10:45 pm" → start: 20:15:00, end: 22:45:00
+  * "9:30 am to 11:30 am" → start: 09:30:00, end: 11:30:00
+  * "12:00 pm to 1:00 pm" → start: 12:00:00, end: 13:00:00
+  * "3:45 pm to 5:15 pm" → start: 15:45:00, end: 17:15:00
+  
+  SHORTHAND FORMATS:
+  * "8-10 pm" → start: 20:00:00, end: 22:00:00
+  * "8 to 10 pm" → start: 20:00:00, end: 22:00:00
+  * "9am-5pm" → start: 09:00:00, end: 17:00:00
+  * "2-4pm" → start: 14:00:00, end: 16:00:00
+  * "1-3 pm" → start: 13:00:00, end: 15:00:00
+  
+  IN NATURAL LANGUAGE:
+  * "from eight in the evening until ten at night" → start: 20:00:00, end: 22:00:00
+  * "starting at 8pm and ending at 10pm" → start: 20:00:00, end: 22:00:00
+  * "8pm start, 10pm end" → start: 20:00:00, end: 22:00:00
+  * "beginning at 8pm, finishing at 10pm" → start: 20:00:00, end: 22:00:00
+  
+  KEYWORDS TO RECOGNIZE TIME INTERVALS:
+  - "to", "until", "through", "till", "-", "and", "from...to", "between...and"
+  - "starting at...ending at", "beginning at...finishing at"
+  
+  CONVERSION RULES:
+  * Convert 12-hour to 24-hour: 8pm = 20:00, 10pm = 22:00, 8am = 08:00, 12pm = 12:00, 12am = 00:00
+  * Convert word numbers: "eight" = 8, "nine" = 9, "ten" = 10, "eleven" = 11, "twelve" = 12
+  * Convert word numbers: "one" = 1, "two" = 2, "three" = 3, "four" = 4, "five" = 5, "six" = 6, "seven" = 7
+  * Convert word minutes: "thirty" = 30, "fifteen" = 15, "forty-five" = 45, "twenty" = 20
+  
+  CRITICAL RULES:
+  * ALWAYS use the exact times mentioned in the time interval
+  * If user says "8 pm to 10 pm", the event MUST start at 8pm (20:00) and end at 10pm (22:00) on that day
+  * DO NOT use random or default times when a time interval is explicitly stated
+  * If both start and end times are provided, use BOTH exactly as stated
+  * Time intervals ALWAYS override default durations
+- For single times (no interval): Default duration is 1 hour
+  * "at 3pm" → start: 15:00:00, end: 16:00:00
+  * "at 2:30 pm" → start: 14:30:00, end: 15:30:00
+- For all-day events: ONLY for birthdays, graduations, and anniversaries (unless time range is specified). For others, require explicit "all day" phrase.
+- For all-day events: start should be 00:00:00, end should be 23:59:59 on same day.
+- Time ranges override all-day: If time range mentioned (e.g., "1-5", "12-1", "8pm to 10pm"), it's NOT all-day.
+- Extract clean titles: "I need to pick up the kids at 3pm" -> title: "Pick Up Kids", not the whole sentence.
+- Capitalize title: First letter of each word should be capitalized.
+
+EDITING EVENTS (CRITICAL):
+- Match events by title similarity: "my meeting" matches "Team Meeting", "doctor" matches "Doctor Appointment"
+- For partial edits, preserve original values for fields not mentioned:
+  * "move to tomorrow" → Keep time, change date
+  * "change time to 3pm" → Keep date, change time (preserve duration)
+  * "move forward 2 hours" → Add 2 hours to both start and end
+  * "move to next week" → Keep day of week and time, move to next week
+  * "reschedule to January 15th" → Keep time, change date
+  * "change to 1-3pm" → Keep date, change time range
+- Always include ALL required fields (title, start, end) even if preserving original values
+- For relative time changes: Calculate new times based on current event times
+- For relative date changes: Calculate new dates based on current event dates
+- Preserve event duration unless explicitly changed (e.g., "make it 2 hours" or new end time given)
+- If event cannot be matched, return null
+
+DATE/TIME REASONING:
+- "tomorrow" = current date + 1 day
+- "next week" = same day next week (if today is Monday, next week = next Monday)
+- "next month" = same day next month
+- Relative times: "in 2 hours" = current time + 2 hours
+- Day names: Use next occurrence if past today, or today if it's today
+
+If date/time unclear or command unclear, return null.
+
+Return ONLY valid JSON, no other text.`;
+
+        try {
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini', // Using mini for faster, cheaper responses
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are a calendar assistant specialized in parsing time intervals. CRITICAL RULES: 1) When user specifies a time interval (e.g., "8 pm to 10 pm", "8pm-10pm", "from 8pm until 10pm", "between 2pm and 4pm"), you MUST use those EXACT times (8pm=20:00, 10pm=22:00). 2) Recognize time intervals in ALL formats: "to", "until", "through", "-", "and", "from...to", "between...and". 3) Convert word numbers to digits (eight=8, ten=10). 4) Convert 12-hour to 24-hour format (8pm=20:00, 8am=08:00). 5) NEVER use random or default times when a time interval is explicitly provided. 6) If both start and end times are in the interval, use BOTH exactly. Return only valid JSON, no explanations or markdown.'
+                        },
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ],
+                    temperature: 0.3, // Lower temperature for more consistent parsing
+                    response_format: { type: 'json_object' }
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('OpenAI API error:', response.status, errorText);
+                throw new Error(`OpenAI API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content;
+            if (!content) {
+                console.error('No content in OpenAI response');
+                return null;
+            }
+
+            // Parse JSON response
+            let llmCommand;
+            try {
+                // Remove markdown code blocks if present
+                const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                llmCommand = JSON.parse(cleanedContent);
+            } catch (parseError) {
+                console.error('Error parsing LLM JSON response:', parseError, content);
+                return null;
+            }
+
+            // Validate and convert the LLM response to our command format
+            if (llmCommand.type === 'createEvent' && llmCommand.event) {
+                // Ensure dates are valid ISO strings
+                const start = new Date(llmCommand.event.start);
+                const end = new Date(llmCommand.event.end);
+                
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                    console.error('Invalid dates from LLM:', llmCommand.event.start, llmCommand.event.end);
+                    return null;
+                }
+
+                return {
+                    type: 'createEvent',
+                    event: {
+                        title: llmCommand.event.title,
+                        start: start.toISOString(),
+                        end: end.toISOString(),
+                        description: llmCommand.event.description || '',
+                        calendar: llmCommand.event.calendar || 'calendar',
+                        color: llmCommand.event.color || '#4285F4'
+                    }
+                };
+            } else if (llmCommand.type === 'editEvent' && llmCommand.eventId && llmCommand.event) {
+                // Find the original event to merge changes intelligently
+                const originalEvent = events.find(e => e.id === llmCommand.eventId || e.id.toString() === llmCommand.eventId.toString());
+                
+                if (!originalEvent) {
+                    console.error('Event not found for edit:', llmCommand.eventId);
+                    return null;
+                }
+
+                const start = new Date(llmCommand.event.start);
+                const end = new Date(llmCommand.event.end);
+                
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                    console.error('Invalid dates from LLM:', llmCommand.event.start, llmCommand.event.end);
+                    return null;
+                }
+
+                // Merge LLM changes with original event (LLM should already handle this, but ensure all fields present)
+                const mergedEvent = {
+                    title: llmCommand.event.title || originalEvent.title,
+                    start: start.toISOString(),
+                    end: end.toISOString(),
+                    description: llmCommand.event.description !== undefined ? llmCommand.event.description : (originalEvent.description || ''),
+                    calendar: llmCommand.event.calendar || originalEvent.calendar || 'calendar',
+                    color: llmCommand.event.color || originalEvent.color || '#4285F4'
+                };
+
+                console.log('LLM edit - Original:', originalEvent);
+                console.log('LLM edit - Changes:', mergedEvent);
+
+                return {
+                    type: 'editEvent',
+                    eventId: originalEvent.id,
+                    event: mergedEvent,
+                    eventTitle: originalEvent.title
+                };
+            } else if (llmCommand.type === 'deleteEvent' && llmCommand.eventId) {
+                return {
+                    type: 'deleteEvent',
+                    eventId: llmCommand.eventId,
+                    eventTitle: llmCommand.eventTitle
+                };
+            } else if (llmCommand.type === 'navigate' && typeof llmCommand.direction === 'number') {
+                return {
+                    type: 'navigate',
+                    direction: llmCommand.direction
+                };
+            } else if (llmCommand.type === 'switchView' && llmCommand.view) {
+                return {
+                    type: 'switchView',
+                    view: llmCommand.view
+                };
+            } else if (llmCommand.type === 'goToToday') {
+                return { type: 'goToToday' };
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Error calling OpenAI API:', error);
+            return null;
+        }
+    };
+
     const parseVoiceCommandWithEntities = (transcript, entities, originalTranscript) => {
         const lowerText = transcript.toLowerCase().trim();
         console.log('Parsing command with entities:', lowerText, entities);
@@ -40,6 +398,22 @@ export default function DarkFooter({
         const quantityEntities = entities.filter(e => e.type === 'QUANTITY' || e.label === 'QUANTITY');
         const personEntities = entities.filter(e => e.type === 'PERSON' || e.label === 'PERSON');
         const orgEntities = entities.filter(e => e.type === 'ORGANIZATION' || e.label === 'ORGANIZATION');
+        const intentEntities = entities.filter(e => e.type === 'INTENT' || e.label === 'INTENT');
+        
+        // Use Deepgram's intent recognition if available (higher confidence than keyword matching)
+        let deepgramIntent = null;
+        if (intentEntities.length > 0) {
+            // Use the highest confidence intent
+            const bestIntent = intentEntities.reduce((best, current) => {
+                const currentConf = current.confidence || 0;
+                const bestConf = best?.confidence || 0;
+                return currentConf > bestConf ? current : best;
+            }, null);
+            if (bestIntent && bestIntent.confidence > 0.7) {
+                deepgramIntent = bestIntent.value?.toLowerCase() || bestIntent.text?.toLowerCase() || '';
+                console.log(`Using Deepgram intent: ${deepgramIntent} (confidence: ${bestIntent.confidence})`);
+            }
+        }
         
         // Enhanced intent detection with confidence scoring
         const createKeywords = ['create', 'add', 'schedule', 'make', 'set up', 'book', 'plan', 'put', 'insert', 'new'];
@@ -64,11 +438,28 @@ export default function DarkFooter({
             return score;
         };
         
-        const createScore = getIntentScore(createKeywords, lowerText);
-        const editScore = getIntentScore(editKeywords, lowerText);
-        const deleteScore = getIntentScore(deleteKeywords, lowerText);
-        const navigateScore = getIntentScore(navigateKeywords, lowerText);
-        const viewScore = getIntentScore(viewKeywords, lowerText) && (lowerText.includes('month') || lowerText.includes('week') || lowerText.includes('day'));
+        // Boost scores if Deepgram detected matching intents (more reliable than keyword matching)
+        let createScore = getIntentScore(createKeywords, lowerText);
+        let editScore = getIntentScore(editKeywords, lowerText);
+        let deleteScore = getIntentScore(deleteKeywords, lowerText);
+        let navigateScore = getIntentScore(navigateKeywords, lowerText);
+        let viewScore = getIntentScore(viewKeywords, lowerText) && (lowerText.includes('month') || lowerText.includes('week') || lowerText.includes('day'));
+        
+        // If Deepgram detected an intent, boost the corresponding score significantly
+        if (deepgramIntent) {
+            if (deepgramIntent.includes('create') || deepgramIntent.includes('add') || deepgramIntent.includes('schedule') || deepgramIntent.includes('new')) {
+                createScore += 20; // Significant boost
+            }
+            if (deepgramIntent.includes('edit') || deepgramIntent.includes('update') || deepgramIntent.includes('modify') || deepgramIntent.includes('change')) {
+                editScore += 20;
+            }
+            if (deepgramIntent.includes('delete') || deepgramIntent.includes('remove') || deepgramIntent.includes('cancel')) {
+                deleteScore += 20;
+            }
+            if (deepgramIntent.includes('navigate') || deepgramIntent.includes('go') || deepgramIntent.includes('show')) {
+                navigateScore += 20;
+            }
+        }
         
         // Check if "go to" is used for navigation (calendar navigation) vs event creation (going to a place)
         // If "go to" is followed by time/date, it's likely an event creation
@@ -190,14 +581,21 @@ export default function DarkFooter({
             }
         }
         
-        // Parse day names
+        // Parse day names (e.g., "On Wednesday", "On Tuesday at 3 pm")
+        // Use the next occurrence: if day is today or in the future this week, use this week; otherwise use next week
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         for (let i = 0; i < dayNames.length; i++) {
             if (dateText.includes(dayNames[i])) {
-                const currentDay = today.getDay();
-                const targetDay = i;
+                const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+                const targetDay = i; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
                 let daysToAdd = targetDay - currentDay;
-                if (daysToAdd <= 0) daysToAdd += 7;
+                // If the target day is today (daysToAdd === 0), use today
+                // If the target day is in the future this week (daysToAdd > 0), use daysToAdd as is
+                // If the target day has already passed this week (daysToAdd < 0), add 7 days for next week
+                if (daysToAdd < 0) {
+                    daysToAdd += 7; // Next week
+                }
+                // If daysToAdd === 0, it stays 0 (same day)
                 const targetDate = new Date(today);
                 targetDate.setDate(targetDate.getDate() + daysToAdd);
                 return targetDate;
@@ -1215,7 +1613,7 @@ export default function DarkFooter({
                 targetDate.setDate(targetDate.getDate() + 7);
             }
             
-            // Parse month names (January, February, etc.)
+            // Parse month names (January, February, etc.) - PRIORITY: specific dates take precedence over day names
             const monthNamesFull = [
                 'january', 'february', 'march', 'april', 'may', 'june',
                 'july', 'august', 'september', 'october', 'november', 'december'
@@ -1225,6 +1623,7 @@ export default function DarkFooter({
                 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
             ];
             
+            let monthDateFound = false;
             for (let i = 0; i < monthNamesFull.length; i++) {
                 const monthName = monthNamesFull[i];
                 const monthShort = monthNamesShort[i];
@@ -1242,31 +1641,43 @@ export default function DarkFooter({
                     const dayMatch = afterMonth.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/);
                     const yearMatch = textToParse.match(/\b(20\d{2}|\d{4})\b/);
                     
-                    const day = dayMatch ? parseInt(dayMatch[1]) : today.getDate();
+                    const day = dayMatch ? parseInt(dayMatch[1]) : null;
                     const year = yearMatch ? parseInt(yearMatch[1]) : today.getFullYear();
                     
-                    // Validate day is reasonable (1-31)
-                    if (day >= 1 && day <= 31) {
+                    // Only use month date if we found a specific day number
+                    // This ensures "January 17th" takes precedence over "Friday"
+                    if (day !== null && day >= 1 && day <= 31) {
                         const parsedDate = new Date(year, i, day);
                         if (!isNaN(parsedDate.getTime())) {
                             targetDate = parsedDate;
+                            monthDateFound = true;
                             break;
                         }
                     }
                 }
             }
             
-            // Parse day names
-            const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-            for (let i = 0; i < dayNames.length; i++) {
-                if (textToParse.includes(dayNames[i])) {
-                    const currentDay = today.getDay();
-                    const targetDay = i;
-                    let daysToAdd = targetDay - currentDay;
-                    if (daysToAdd <= 0) daysToAdd += 7;
-                    targetDate = new Date(today);
-                    targetDate.setDate(targetDate.getDate() + daysToAdd);
-                    break;
+            // Parse day names (e.g., "On Wednesday", "On Tuesday at 3 pm")
+            // Only use day names if no specific month/day date was found
+            // Use the next occurrence: if day is today or in the future this week, use this week; otherwise use next week
+            if (!monthDateFound) {
+                const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                for (let i = 0; i < dayNames.length; i++) {
+                    if (textToParse.includes(dayNames[i])) {
+                        const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+                        const targetDay = i; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+                        let daysToAdd = targetDay - currentDay;
+                        // If the target day is today (daysToAdd === 0), use today
+                        // If the target day is in the future this week (daysToAdd > 0), use daysToAdd as is
+                        // If the target day has already passed this week (daysToAdd < 0), add 7 days for next week
+                        if (daysToAdd < 0) {
+                            daysToAdd += 7; // Next week
+                        }
+                        // If daysToAdd === 0, it stays 0 (same day)
+                        targetDate = new Date(today);
+                        targetDate.setDate(targetDate.getDate() + daysToAdd);
+                        break;
+                    }
                 }
             }
         }
@@ -2032,9 +2443,9 @@ export default function DarkFooter({
             // - smart_format: better formatting
             // - paragraphs: better understanding of structure
             // - utterances: separate utterances
-            // - entity_detection: extract dates, times, quantities
+            // - entity_detection: extract dates, times, quantities, locations
             // - punctuate: punctuation
-            // - model: nova-3 for best accuracy and understanding
+            // - model: nova-3 for best accuracy
             const params = new URLSearchParams({
                 model: 'nova-3',
                 language: 'en-US',
@@ -2063,6 +2474,7 @@ export default function DarkFooter({
             
             const data = await response.json();
             const transcript = data.results?.channels?.[0]?.alternatives?.[0]?.transcript || '';
+            
             // Handle different possible entity structures from Deepgram
             let entities = [];
             try {
@@ -2072,6 +2484,7 @@ export default function DarkFooter({
             } catch (e) {
                 console.warn('Could not parse entities:', e);
             }
+            
             const paragraphs = data.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.transcript || 
                               data.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.transcripts?.[0] || '';
             
@@ -2083,17 +2496,30 @@ export default function DarkFooter({
             if (transcript.trim()) {
                 // Use paragraphs if available, otherwise use transcript
                 const textToParse = paragraphs.trim() || transcript.trim();
-                console.log('Attempting to parse:', textToParse);
+                console.log('Attempting to parse with LLM:', textToParse);
                 console.log('Available entities:', entities.map(e => ({ type: e.type || e.label, value: e.value })));
                 
+                // Use LLM for intelligent command parsing
+                const llmCommand = await parseCommandWithLLM(textToParse, entities);
+                
+                if (llmCommand) {
+                    console.log('LLM parsed command successfully:', llmCommand);
+                    executeCommand(llmCommand);
+                    return;
+                }
+                
+                // Fallback to entity-based parsing if LLM fails
+                console.log('LLM parsing failed, falling back to entity-based parsing');
                 const command = parseVoiceCommandWithEntities(textToParse, entities, transcript);
                 if (command) {
                     console.log('Command parsed successfully:', command);
                     executeCommand(command);
                 } else {
                     // Provide helpful feedback based on what was detected
-                    const detectedDate = dateEntities.length > 0 ? dateEntities[0].value : 'none';
-                    const detectedTime = timeEntities.length > 0 ? timeEntities[0].value : 'none';
+                    const dateEntitiesFiltered = entities.filter(e => e.type === 'DATE' || e.label === 'DATE');
+                    const timeEntitiesFiltered = entities.filter(e => e.type === 'TIME' || e.label === 'TIME');
+                    const detectedDate = dateEntitiesFiltered.length > 0 ? (dateEntitiesFiltered[0].value || dateEntitiesFiltered[0].text || dateEntitiesFiltered[0].word || 'none') : 'none';
+                    const detectedTime = timeEntitiesFiltered.length > 0 ? (timeEntitiesFiltered[0].value || timeEntitiesFiltered[0].text || timeEntitiesFiltered[0].word || 'none') : 'none';
                     const detectedIntents = [];
                     if (textToParse.match(/create|add|schedule|make/i)) detectedIntents.push('create');
                     if (textToParse.match(/delete|remove|cancel/i)) detectedIntents.push('delete');
@@ -2191,11 +2617,11 @@ export default function DarkFooter({
                             </circle>
                         </svg>
                     ) : (
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="currentColor"/>
-                    </svg>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" fill="currentColor"/>
+                </svg>
                     )}
-                </button>
+            </button>
                 <button 
                     className="day-structure-arrow-btn day-structure-arrow-right"
                     onClick={() => onNavigateDate && onNavigateDate(1)}
